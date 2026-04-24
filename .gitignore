@@ -1,6 +1,19 @@
 # Rust / Bevy build artifacts
 /project/target/
 
+# Android local config and build artifacts
+/android/.gradle/
+/android/.idea/
+/android/.kotlin/
+/android/build/
+/android/captures/
+/android/*.iml
+/android/app/build/
+/android/app/.cxx/
+/android/app/.externalNativeBuild/
+/android/app/src/main/jniLibs/
+/android/local.properties
+
 # Editor settings
 /.vscode/
 /.idea/

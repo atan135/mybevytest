@@ -326,3 +326,192 @@ fn update_game() {}
 - Bevy Quick Start: `https://bevy.org/learn/quick-start/getting-started/`
 - Bevy Setup: `https://bevy.org/learn/quick-start/getting-started/setup/`
 - Bevy 官方 examples: `https://github.com/bevyengine/bevy/tree/latest/examples`
+
+## 15. 本项目如何打包成 Windows 和 Android App
+
+这一节只针对当前仓库结构说明：
+
+- 仓库根目录不是 Cargo 工程根目录
+- 真正的游戏工程在 `project/`
+- 当前已经是一个可运行的桌面 Bevy 二进制项目
+
+### Windows 打包
+
+Windows 版最直接，就是构建 release 可执行文件。
+
+在仓库根目录执行：
+
+```powershell
+Set-Location project
+cargo build --release
+```
+
+构建完成后，产物在：
+
+```text
+project/target/release/project.exe
+```
+
+如果后续你在 `project/assets/` 里放了贴图、音频、字体等资源，发布时通常要把资源目录一起带上。常见发布目录结构：
+
+```text
+dist/
+|-- project.exe
+`-- assets/
+```
+
+也就是说：
+
+1. 先执行 `cargo build --release`
+2. 拿到 `project/target/release/project.exe`
+3. 把 `project/assets/` 复制到最终发布目录
+4. 然后把整个目录发给别人运行
+
+如果你后面想做真正的安装包，再额外接 Inno Setup、WiX 或 NSIS 即可，但对 Bevy 来说第一步并不是“安装包”，而是先产出 release 的 `.exe`。
+
+### Android 打包
+
+Android 不能直接把当前这个 `main.rs` 桌面程序原样打成 APK。
+
+你还需要补三层东西：
+
+1. Rust 的 Android 目标工具链
+2. Android NDK 和 `cargo-ndk`
+3. 一个 Android Studio / Gradle 壳工程，用来把 Rust 产出的 `.so` 打进 APK
+
+#### 第一步：补齐 Android 构建环境
+
+先安装 Rust Android targets：
+
+```powershell
+rustup target add aarch64-linux-android armv7-linux-androideabi
+```
+
+再安装 `cargo-ndk`：
+
+```powershell
+cargo install cargo-ndk
+```
+
+然后确认 Android Studio 里已经安装：
+
+- Android SDK
+- Android NDK
+- platform-tools
+- build-tools
+
+建议把下面环境变量配好：
+
+```powershell
+$env:ANDROID_SDK_ROOT="C:\Users\你的用户名\AppData\Local\Android\Sdk"
+$env:ANDROID_NDK_HOME="C:\Users\你的用户名\AppData\Local\Android\Sdk\ndk\版本号"
+```
+
+#### 第二步：把游戏逻辑从 `main.rs` 抽到 `lib.rs`
+
+桌面版保留 `main.rs` 没问题，但 Android 一般需要把主逻辑做成库，再由 Android 工程加载。
+
+建议改成：
+
+```text
+project/
+|-- src/
+|   |-- main.rs
+|   `-- lib.rs
+```
+
+推荐结构：
+
+- `src/lib.rs`：提供 `pub fn run()`，里面放 `App::new()...run()`
+- `src/main.rs`：桌面入口，只负责调用 `project::run()`
+
+同时在 `project/Cargo.toml` 里补一个库目标：
+
+```toml
+[lib]
+crate-type = ["cdylib", "rlib"]
+```
+
+如果你准备跟 Bevy 当前移动端默认方案保持一致，通常用 `GameActivity` 即可；如果你要兼容更老的 Android API，再考虑 `android-native-activity`。
+
+#### 第三步：补 Android 壳工程
+
+最省事的方式不是自己从零配 Gradle，而是直接参考 Bevy 官方的移动示例：
+
+- `examples/mobile/android_example/`
+
+你可以在仓库根目录旁边或仓库内新建一个 Android 工程目录，例如：
+
+```text
+mybevy/
+|-- android/
+|-- docs/
+`-- project/
+```
+
+这个 `android/` 工程的职责只有两个：
+
+1. 从 Rust 工程编译出 `.so`
+2. 把 `.so` 和 `assets/` 一起打包成 APK
+
+#### 第四步：编译 Android 的 Rust 动态库
+
+在 `project/` 目录执行类似命令：
+
+```powershell
+cargo ndk -t arm64-v8a -o ..\android\app\src\main\jniLibs build --release
+```
+
+执行后会在 `android/app/src/main/jniLibs/arm64-v8a/` 下得到对应的 Rust 动态库。
+
+如果你还要支持更多架构，再额外构建：
+
+- `armeabi-v7a`
+- `x86_64`
+
+#### 第五步：在 Android 工程里打 APK
+
+进入 Android 工程目录后执行：
+
+```powershell
+.\gradlew assembleDebug
+```
+
+或发布版：
+
+```powershell
+.\gradlew assembleRelease
+```
+
+最终 APK 通常在：
+
+```text
+android/app/build/outputs/apk/debug/
+android/app/build/outputs/apk/release/
+```
+
+#### 资源目录怎么带进 Android
+
+如果你的资源放在 `project/assets/`，Android 工程也要能看到它。
+
+最常见有两种做法：
+
+1. 构建前把 `project/assets/` 复制到 `android/app/src/main/assets/`
+2. 在 Gradle `sourceSets` 里直接把 Rust 工程的 `assets/` 目录映射进去
+
+第二种通常更适合当前仓库，因为可以继续只维护一份资源。
+
+### 当前仓库的实际结论
+
+按现在的状态：
+
+- Windows：可以直接走 `cargo build --release`
+- Android：还不能直接出 APK，需要先补 `lib.rs + [lib] crate-type + android/ Gradle 工程`
+
+如果你希望下一步就把它真正改到“同一套代码同时能出 Windows exe 和 Android APK”，建议按这个顺序做：
+
+1. 先把 `project/src/main.rs` 逻辑迁到 `project/src/lib.rs`
+2. 修改 `project/Cargo.toml` 增加 `[lib]`
+3. 在仓库里新增 `android/` 壳工程
+4. 接通 `cargo ndk`
+5. 验证 `assembleDebug`
