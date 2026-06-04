@@ -10,6 +10,7 @@
 - `project/` 是实际的游戏工程根目录
 - 当前游戏工程使用 Rust stable 和 `bevy = "0.18.1"`
 - 当前玩法是单界面触控/鼠标互动：按下显示硬边圆形反馈，拖动生成水波纹拖尾，松开后在原地淡出
+- 当前内置 `project/src/network/` 网络模块，提供 HTTP、TCP 和 KCP 的 Bevy 消息接口
 - `android/` 是 Android Gradle 壳工程，用于加载 Rust 产出的 `libproject.so` 并打包 APK
 
 ## 目录约定
@@ -19,6 +20,7 @@
 - `project/`：Rust/Bevy 工程根目录
 - `project/src/`：游戏源码
 - `project/src/game/`：游戏玩法插件和系统模块
+- `project/src/network/`：网络通信插件和 HTTP/TCP/KCP 接口
 - `project/assets/`：贴图、音频、字体和其他资源
 - `project/Cargo.toml`：Rust 项目配置
 - `android/`：Android 打包工程

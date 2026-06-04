@@ -523,6 +523,40 @@ android/app/build/outputs/apk/release/
 2. 按住拖动时，主圆平滑跟随，并沿拖动路径生成水波纹拖尾。
 3. 松开后，主圆在原地逐帧淡出；新一次按压会直接在新位置生成。
 
+当前工程已经内置一套网络通信接口：
+
+- `project/src/network/`：网络插件、命令、事件和连接配置
+- `NetworkPlugin`：已经在 `project/src/lib.rs` 中注册
+- `NetworkCommand`：从 Bevy 系统发起 HTTP 请求、TCP 连接、KCP 连接、发送数据或断开连接
+- `NetworkEvent`：接收 HTTP 响应、连接状态、数据包、发送结果和错误
+
+HTTP 是一次性请求接口；TCP 和 KCP 是长连接接口，都会返回 `ConnectionId` 对应的连接事件。
+网络实际 I/O 在后台 Tokio runtime 中执行，不阻塞 Bevy 主线程。Android 包已经在
+`android/app/src/main/AndroidManifest.xml` 中声明了 `android.permission.INTERNET`。
+
+示例用法：
+
+```rust
+use bevy::prelude::*;
+use project::network::{HttpRequest, NetworkCommand, NetworkEvent, TcpConnectConfig};
+
+fn send_http(mut commands: MessageWriter<NetworkCommand>) {
+    commands.write(NetworkCommand::Http(HttpRequest::get("https://example.com")));
+}
+
+fn connect_tcp(mut commands: MessageWriter<NetworkCommand>) {
+    commands.write(NetworkCommand::ConnectTcp(TcpConnectConfig::new(
+        "127.0.0.1:9000",
+    )));
+}
+
+fn read_network(mut events: MessageReader<NetworkEvent>) {
+    for event in events.read() {
+        info!("{event:?}");
+    }
+}
+```
+
 桌面开发验证：
 
 ```powershell
