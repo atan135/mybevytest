@@ -9,6 +9,8 @@
 - 仓库根目录用于放协作文档、说明文件和仓库级配置
 - `project/` 是实际的游戏工程根目录
 - 当前游戏工程使用 Rust stable 和 `bevy = "0.18.1"`
+- 当前玩法是单界面触控/鼠标互动：按下显示硬边圆形反馈，拖动生成水波纹拖尾，松开后在原地淡出
+- `android/` 是 Android Gradle 壳工程，用于加载 Rust 产出的 `libproject.so` 并打包 APK
 
 ## 目录约定
 
@@ -16,8 +18,10 @@
 - `docs/bevy-getting-started.md`：当前 Bevy 入门说明
 - `project/`：Rust/Bevy 工程根目录
 - `project/src/`：游戏源码
+- `project/src/game/`：游戏玩法插件和系统模块
 - `project/assets/`：贴图、音频、字体和其他资源
 - `project/Cargo.toml`：Rust 项目配置
+- `android/`：Android 打包工程
 
 除非有明确理由，不要把游戏源码放在仓库根目录。
 
@@ -53,6 +57,26 @@ cargo fmt
 
 ```powershell
 cargo check
+```
+
+构建 Android Rust 动态库：
+
+```powershell
+Set-Location project
+cargo ndk -t arm64-v8a -P 26 -o ..\android\app\src\main\jniLibs build --release
+```
+
+打包 Android Debug APK：
+
+```powershell
+Set-Location ..\android
+.\gradlew.bat assembleDebug
+```
+
+如果 `JAVA_HOME` 指向 JDK 8，先在当前终端切到 JDK 17 或更新版本，例如：
+
+```powershell
+$env:JAVA_HOME="C:\Program Files\Java\jdk-21"
 ```
 
 更新依赖后如需锁版本文件：

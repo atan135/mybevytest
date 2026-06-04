@@ -503,15 +503,50 @@ android/app/build/outputs/apk/release/
 
 ### 当前仓库的实际结论
 
-按现在的状态：
+当前仓库已经具备同一套 Bevy 代码分别运行桌面版和 Android 版的基础结构：
 
-- Windows：可以直接走 `cargo build --release`
-- Android：还不能直接出 APK，需要先补 `lib.rs + [lib] crate-type + android/ Gradle 工程`
+- `project/src/main.rs`：桌面入口，只负责调用 `project::run()`
+- `project/src/lib.rs`：共享 Bevy App 入口，并通过 `#[bevy_main]` 支持移动端入口
+- `project/src/game/`：当前游戏玩法模块
+- `project/Cargo.toml`：已经包含 `crate-type = ["rlib", "cdylib"]`
+- `android/`：Android Gradle 壳工程，会加载 `libproject.so`
 
-如果你希望下一步就把它真正改到“同一套代码同时能出 Windows exe 和 Android APK”，建议按这个顺序做：
+当前玩法是单界面触控/鼠标互动：
 
-1. 先把 `project/src/main.rs` 逻辑迁到 `project/src/lib.rs`
-2. 修改 `project/Cargo.toml` 增加 `[lib]`
-3. 在仓库里新增 `android/` 壳工程
-4. 接通 `cargo ndk`
-5. 验证 `assembleDebug`
+1. 鼠标左键或手指按下时，在对应位置显示硬边半透明圆形反馈。
+2. 按住拖动时，主圆平滑跟随，并沿拖动路径生成水波纹拖尾。
+3. 松开后，主圆在原地逐帧淡出；新一次按压会直接在新位置生成。
+
+桌面开发验证：
+
+```powershell
+Set-Location project
+cargo fmt
+cargo check
+cargo run
+```
+
+Android Debug APK 构建流程：
+
+```powershell
+rustup target add aarch64-linux-android
+cargo install cargo-ndk
+
+Set-Location project
+cargo ndk -t arm64-v8a -P 26 -o ..\android\app\src\main\jniLibs build --release
+
+Set-Location ..\android
+.\gradlew.bat assembleDebug
+```
+
+如果本机 `JAVA_HOME` 指向 JDK 8，Android Gradle Plugin 8.4.0 会构建失败。需要先把当前终端的 `JAVA_HOME` 临时切到 JDK 17 或更新版本，例如：
+
+```powershell
+$env:JAVA_HOME="C:\Program Files\Java\jdk-21"
+```
+
+构建完成后，Debug APK 通常在：
+
+```text
+android/app/build/outputs/apk/debug/app-debug.apk
+```
