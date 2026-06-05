@@ -402,7 +402,7 @@ fn authority_dev_log_events(
             AuthorityEvent::FrameApplied { frame } => {
                 if frame.frame_id != state.last_logged_frame {
                     state.last_logged_frame = frame.frame_id;
-                    info!(
+                    debug!(
                         frame_id = frame.frame_id,
                         input_count = frame.inputs.len(),
                         players = ?frame.snapshot.players,
