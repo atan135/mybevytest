@@ -10,6 +10,7 @@ impl Plugin for UiLayerPlugin {
 pub(in crate::game) enum UiLayer {
     Page,
     Modal,
+    Loading,
     Toast,
 }
 

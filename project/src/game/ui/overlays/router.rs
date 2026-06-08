@@ -3,6 +3,7 @@ use bevy::prelude::*;
 use crate::game::{
     navigation::{AppUiMode, RouteButton},
     ui::overlays::{
+        loading::{UiLoading, UiLoadingRoot, close_loading, spawn_loading},
         modal::{
             UiModal, UiModalResult, UiModalRoot, close_modals, handle_modal_action_buttons,
             spawn_modal,
@@ -37,6 +38,8 @@ pub(in crate::game) enum UiRouteCommand {
     ChangeMode(AppUiMode),
     OpenModal(UiModal),
     CloseModal,
+    ShowLoading(UiLoading),
+    HideLoading,
     ShowToast(UiToast),
 }
 
@@ -56,12 +59,14 @@ fn handle_ui_route_commands(
     theme: Res<UiTheme>,
     mut route_commands: MessageReader<UiRouteCommand>,
     mut next_mode: ResMut<NextState<AppUiMode>>,
+    loading_roots: Query<Entity, With<UiLoadingRoot>>,
     modal_roots: Query<Entity, With<UiModalRoot>>,
     toast_roots: Query<Entity, With<UiToastRoot>>,
 ) {
     for command in route_commands.read() {
         match command {
             UiRouteCommand::ChangeMode(mode) => {
+                close_loading(&mut commands, &loading_roots);
                 close_modals(&mut commands, &modal_roots);
                 next_mode.set(*mode);
             }
@@ -71,6 +76,13 @@ fn handle_ui_route_commands(
             }
             UiRouteCommand::CloseModal => {
                 close_modals(&mut commands, &modal_roots);
+            }
+            UiRouteCommand::ShowLoading(loading) => {
+                close_loading(&mut commands, &loading_roots);
+                spawn_loading(&mut commands, &theme, loading);
+            }
+            UiRouteCommand::HideLoading => {
+                close_loading(&mut commands, &loading_roots);
             }
             UiRouteCommand::ShowToast(toast) => {
                 close_toasts(&mut commands, &toast_roots);

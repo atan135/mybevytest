@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::game::ui::overlays::UiModalRoot;
+use crate::game::ui::overlays::{UiLoadingRoot, UiModalRoot};
 
 pub(in crate::game) struct UiInputPlugin;
 
@@ -25,9 +25,11 @@ pub(in crate::game) struct UiInputState {
 fn update_ui_input_state(
     mut input_state: ResMut<UiInputState>,
     buttons: Query<&Interaction, With<Button>>,
+    loading: Query<(), With<UiLoadingRoot>>,
     modals: Query<(), With<UiModalRoot>>,
 ) {
-    input_state.pointer_blocked = !modals.is_empty()
+    input_state.pointer_blocked = !loading.is_empty()
+        || !modals.is_empty()
         || buttons
             .iter()
             .any(|interaction| matches!(*interaction, Interaction::Pressed | Interaction::Hovered));
