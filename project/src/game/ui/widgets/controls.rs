@@ -2,14 +2,18 @@ use bevy::prelude::*;
 
 use crate::game::{
     navigation::{AppUiMode, RouteButton},
-    ui::style::theme::{ButtonColors, UiTheme},
+    ui::{
+        style::theme::{ButtonColors, UiTheme},
+        widgets::scroll::UiScrollPlugin,
+    },
 };
 
 pub(in crate::game) struct UiWidgetsPlugin;
 
 impl Plugin for UiWidgetsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, update_button_visuals);
+        app.add_plugins(UiScrollPlugin)
+            .add_systems(Update, update_button_visuals);
     }
 }
 

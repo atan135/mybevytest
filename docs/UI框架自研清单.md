@@ -509,6 +509,7 @@ project/src/game/ui/
 - 在 `UiGallery` 增加 `Floating` 示例 panel，用于验证 `Show Floating`、`CloseTop` 和返回键关闭行为。
 - 实现统一按钮、文本、视觉面板、Toast、Loading、确认弹窗。
 - 实现最小布局组件：纵向、横向、横向换行、网格。表格可以先作为网格布局的上层约定，后续再补表头、列宽和行数据绑定。
+- 实现框架级 ScrollView：滚轮滚动、触控拖动滚动、滚动区域输入拦截。
 - Toast 保持专用通知系统，不纳入 Panel Manager。
 - Loading 作为 `BlockingOverlay` 纳入 Panel Manager。
 - 确认弹窗迁入 Panel Manager，弹窗内容仍可保留独立 `UiModal` 数据结构。
@@ -523,6 +524,7 @@ project/src/game/ui/
 - 返回行为优先处理 `BlockingOverlay`，再关闭最上层 `Modal` 或 `Floating` panel。
 - `UiGallery` 能直接验证 Floating panel 和 `CloseTop` 行为。
 - `UiGallery` 的按钮组和 Overlay 操作区使用框架布局组件，不会因按钮换行导致面板重叠。
+- `UiGallery` 正文使用 ScrollView，窗口高度不足时可以滚动查看底部内容。
 - 通用按钮能展示 `focused / selected / disabled / loading` 等状态，且禁用和加载中按钮不会触发业务 action。
 - 未命中 UI 的触控才进入 `ui_touch` 玩法。
 

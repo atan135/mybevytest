@@ -1,5 +1,6 @@
 pub(in crate::game) mod controls;
 pub(in crate::game) mod layout;
+pub(in crate::game) mod scroll;
 
 pub(in crate::game) use controls::{
     DisabledButton, FocusedButton, LoadingButton, SelectedButton, UiWidgetsPlugin,
@@ -8,3 +9,4 @@ pub(in crate::game) use controls::{
     screen_title, secondary_action_button, secondary_route_button,
 };
 pub(in crate::game) use layout::{ui_column, ui_grid};
+pub(in crate::game) use scroll::{UiScrollView, ui_scroll_column};

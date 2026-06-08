@@ -1,6 +1,9 @@
-use bevy::prelude::*;
+use bevy::{picking::hover::Hovered, prelude::*};
 
-use crate::game::ui::core::{UiPanelId, UiPanelKind, UiPanelRoot, UiPanelSystems};
+use crate::game::ui::{
+    core::{UiPanelId, UiPanelKind, UiPanelRoot, UiPanelSystems},
+    widgets::UiScrollView,
+};
 
 pub(in crate::game) struct UiInputPlugin;
 
@@ -32,6 +35,7 @@ pub(in crate::game) struct UiInputState {
 fn update_ui_input_state(
     mut input_state: ResMut<UiInputState>,
     buttons: Query<&Interaction, With<Button>>,
+    scroll_views: Query<&Hovered, With<UiScrollView>>,
     panels: Query<&UiPanelRoot>,
 ) {
     let top_blocking_panel = panels
@@ -45,5 +49,6 @@ fn update_ui_input_state(
     input_state.pointer_blocked = top_blocking_panel.is_some()
         || buttons
             .iter()
-            .any(|interaction| matches!(*interaction, Interaction::Pressed | Interaction::Hovered));
+            .any(|interaction| matches!(*interaction, Interaction::Pressed | Interaction::Hovered))
+        || scroll_views.iter().any(|hovered| hovered.0);
 }

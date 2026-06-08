@@ -513,6 +513,16 @@ pub(in crate::game) struct UiInputState {
 - `ui_grid` 基于 Bevy UI Grid，用于固定列数网格布局，适合按钮组、卡片组、表格雏形。
 - `UiGallery` 的 Buttons 和 Overlays 区域已改为 `ui_grid(theme, 4)`，避免按钮换行后面板高度没有正确撑开导致重叠。
 
+### ScrollView 小闭环
+
+- 已新增框架级 `UiScrollView` 和 `ui_scroll_column`。
+- `UiScrollView` 基于 Bevy UI 的 `Overflow::scroll_y()` 与 `ScrollPosition`，由 `UiScrollPlugin` 统一处理滚动输入。
+- 桌面鼠标滚轮会根据 hover 到的 UI 节点向上冒泡，优先滚动最近的 `UiScrollView`。
+- 支持按住 Ctrl 后将滚轮方向切换为横向滚动的基础逻辑，供后续横向 ScrollView 复用。
+- 支持 pointer drag 更新 `ScrollPosition`，作为触控拖动滚动的第一版机制。
+- `UiInputState.pointer_blocked` 会识别 hover 中的 `UiScrollView`，避免滚动 UI 时玩法触控同时采集。
+- `UiGallery` 已改为固定 header + 可滚动 body，正文内容放入 `ui_scroll_column`。
+
 ### BlockingOverlay 可取消规则记录
 
 - Loading 作为 `UiPanelKind::BlockingOverlay` 进入 Panel Manager 栈。
