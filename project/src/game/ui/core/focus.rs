@@ -2,7 +2,10 @@ use bevy::{prelude::*, ui::UiSystems};
 
 use crate::game::ui::{
     core::{UiPanelKind, UiPanelRoot},
-    widgets::{DisabledButton, FocusableButton, FocusedButton, LoadingButton, UiTextInput},
+    widgets::{
+        DisabledButton, DisabledTextInput, FocusableButton, FocusedButton, LoadingButton,
+        UiTextInput,
+    },
 };
 
 pub(in crate::game) struct UiFocusPlugin;
@@ -54,6 +57,7 @@ type FocusableButtonFilter = (
     With<Button>,
     With<FocusableButton>,
     Without<DisabledButton>,
+    Without<DisabledTextInput>,
     Without<LoadingButton>,
 );
 

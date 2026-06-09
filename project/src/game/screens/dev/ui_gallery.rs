@@ -20,7 +20,8 @@ use crate::game::{
             },
         },
         widgets::{
-            DisabledButton, FocusedButton, LoadingButton, SelectedButton, UiTextInputSubmitted,
+            DisabledButton, DisabledTextInput, FocusedButton, LoadingButton, ReadonlyTextInput,
+            SelectedButton, UiTextInputMaxChars, UiTextInputSubmitted,
             disabled_primary_action_button_key, disabled_secondary_action_button_key,
             loading_primary_action_button_key, primary_action_button_key, screen_label_key,
             screen_title_key, secondary_action_button_key, secondary_route_button_key, text_input,
@@ -267,10 +268,58 @@ pub(super) fn setup_ui_gallery(
                                     ),
                                     "Pilot 01",
                                 ));
+                                inputs.spawn((
+                                    text_input(
+                                        theme,
+                                        fonts,
+                                        i18n.tr(
+                                            "ui_gallery.inputs.placeholder.note",
+                                            "Type a note",
+                                        ),
+                                        "",
+                                    ),
+                                    UiTextInputMaxChars(12),
+                                ));
+                                inputs.spawn((
+                                    text_input(
+                                        theme,
+                                        fonts,
+                                        i18n.tr(
+                                            "ui_gallery.inputs.placeholder.readonly",
+                                            "Read only",
+                                        ),
+                                        "Readonly sample",
+                                    ),
+                                    ReadonlyTextInput,
+                                ));
+                                inputs.spawn((
+                                    text_input(
+                                        theme,
+                                        fonts,
+                                        i18n.tr(
+                                            "ui_gallery.inputs.placeholder.disabled",
+                                            "Disabled",
+                                        ),
+                                        "Disabled sample",
+                                    ),
+                                    DisabledTextInput,
+                                ));
+                                inputs.spawn((
+                                    text_input(
+                                        theme,
+                                        fonts,
+                                        i18n.tr(
+                                            "ui_gallery.inputs.placeholder.short_code",
+                                            "Max 6 chars",
+                                        ),
+                                        "ABC",
+                                    ),
+                                    UiTextInputMaxChars(6),
+                                ));
                                 inputs.spawn(text_input(
                                     theme,
                                     fonts,
-                                    i18n.tr("ui_gallery.inputs.placeholder.note", "Type a note"),
+                                    i18n.tr("ui_gallery.inputs.placeholder.empty", "Empty input"),
                                     "",
                                 ));
                             });

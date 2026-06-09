@@ -1,5 +1,5 @@
 use bevy::{
-    input::keyboard::{Key, KeyboardInput},
+    input::keyboard::{Key, KeyCode, KeyboardInput},
     prelude::*,
 };
 
@@ -24,6 +24,7 @@ pub(in crate::game) struct UiWidgetsPlugin;
 impl Plugin for UiWidgetsPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(UiScrollPlugin)
+            .init_resource::<UiTextInputClipboard>()
             .add_message::<UiTextInputSubmitted>()
             .add_systems(
                 Update,
@@ -71,10 +72,36 @@ pub(in crate::game) struct UiTextInput;
 pub(in crate::game) struct UiTextInputValue(pub String);
 
 #[derive(Clone, Debug, Default, Component)]
+pub(in crate::game) struct UiTextInputCursor {
+    position: usize,
+    selection: Option<UiTextInputSelection>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct UiTextInputSelection {
+    start: usize,
+    end: usize,
+}
+
+#[derive(Clone, Copy, Debug, Component)]
+pub(in crate::game) struct UiTextInputMaxChars(pub usize);
+
+#[derive(Component)]
+pub(in crate::game) struct ReadonlyTextInput;
+
+#[derive(Component)]
+pub(in crate::game) struct DisabledTextInput;
+
+#[derive(Clone, Debug, Default, Component)]
 pub(in crate::game) struct UiTextInputPlaceholder(pub String);
 
 #[derive(Component)]
 pub(in crate::game) struct UiTextInputText;
+
+#[derive(Debug, Default, Resource)]
+struct UiTextInputClipboard {
+    text: String,
+}
 
 #[derive(Clone, Debug, Message)]
 pub(in crate::game) struct UiTextInputSubmitted {
@@ -426,6 +453,7 @@ pub(in crate::game) fn text_input(
 ) -> impl Bundle {
     let value = value.into();
     let placeholder = placeholder.into();
+    let initial_cursor_position = value.len();
     let display_text = if value.is_empty() {
         placeholder.clone()
     } else {
@@ -442,6 +470,10 @@ pub(in crate::game) fn text_input(
         FocusableButton,
         UiTextInput,
         UiTextInputValue(value),
+        UiTextInputCursor {
+            position: initial_cursor_position,
+            selection: None,
+        },
         UiTextInputPlaceholder(placeholder),
         UiThemeButtonNodeRole::TextInput,
         Node {
@@ -454,8 +486,18 @@ pub(in crate::game) fn text_input(
             border_radius: BorderRadius::all(px(theme.button.radius)),
             ..default()
         },
-        BackgroundColor(text_input_background_color(theme, Interaction::None, false)),
-        BorderColor::all(text_input_border_color(theme, Interaction::None, false)),
+        BackgroundColor(text_input_background_color(
+            theme,
+            Interaction::None,
+            false,
+            false,
+        )),
+        BorderColor::all(text_input_border_color(
+            theme,
+            Interaction::None,
+            false,
+            false,
+        )),
         children![(
             Text::new(display_text),
             TextFont {
@@ -754,8 +796,19 @@ fn update_button_visuals(
 
 fn handle_text_input_keyboard(
     mut keyboard_inputs: MessageReader<KeyboardInput>,
+    key_codes: Res<ButtonInput<KeyCode>>,
     focus_state: Res<UiFocusState>,
-    mut text_inputs: Query<&mut UiTextInputValue, With<UiTextInput>>,
+    mut text_inputs: Query<
+        (
+            &mut UiTextInputValue,
+            &mut UiTextInputCursor,
+            Option<&UiTextInputMaxChars>,
+            Has<ReadonlyTextInput>,
+            Has<DisabledTextInput>,
+        ),
+        With<UiTextInput>,
+    >,
+    mut clipboard: ResMut<UiTextInputClipboard>,
     mut submissions: MessageWriter<UiTextInputSubmitted>,
 ) {
     let Some(focused_entity) = focus_state.focused_entity else {
@@ -763,9 +816,17 @@ fn handle_text_input_keyboard(
         return;
     };
 
-    let Ok(mut value) = text_inputs.get_mut(focused_entity) else {
+    let Ok((mut value, mut cursor, max_chars, is_readonly, is_disabled)) =
+        text_inputs.get_mut(focused_entity)
+    else {
         for _ in keyboard_inputs.read() {}
         return;
+    };
+
+    let mode = UiTextInputEditMode {
+        readonly: is_readonly,
+        disabled: is_disabled,
+        max_chars: max_chars.map(|max_chars| max_chars.0),
     };
 
     for keyboard_input in keyboard_inputs.read() {
@@ -773,28 +834,56 @@ fn handle_text_input_keyboard(
             continue;
         }
 
-        match (&keyboard_input.logical_key, &keyboard_input.text) {
-            (Key::Enter, _) => {
+        let edit_event = ui_text_input_edit_event(keyboard_input, &key_codes);
+        match edit_event {
+            UiTextInputEditEvent::Submit => {
+                if is_readonly || is_disabled {
+                    continue;
+                }
+
                 submissions.write(UiTextInputSubmitted {
                     entity: focused_entity,
                     value: value.0.clone(),
                 });
             }
-            (Key::Backspace, _) => {
-                value.0.pop();
+            UiTextInputEditEvent::Copy => {
+                if is_disabled {
+                    continue;
+                }
+
+                clipboard.text =
+                    selected_text(&value.0, &cursor).unwrap_or_else(|| value.0.clone());
             }
-            (_, Some(inserted_text)) if inserted_text.chars().all(is_printable_char) => {
-                value.0.push_str(inserted_text);
+            UiTextInputEditEvent::Paste => {
+                let clipboard_text = clipboard.text.clone();
+                apply_text_input_edit(
+                    &mut value.0,
+                    &mut cursor,
+                    UiTextInputEditAction::Paste(&clipboard_text),
+                    mode,
+                );
             }
-            _ => {}
+            UiTextInputEditEvent::Edit(action) => {
+                apply_text_input_edit(&mut value.0, &mut cursor, action, mode);
+            }
+            UiTextInputEditEvent::None => {}
         }
     }
 }
 
 fn sync_text_input_display(
     theme: Res<UiTheme>,
+    focus_state: Res<UiFocusState>,
     parents: Query<&ChildOf>,
-    text_inputs: Query<(&UiTextInputValue, &UiTextInputPlaceholder), With<UiTextInput>>,
+    text_inputs: Query<
+        (
+            &UiTextInputValue,
+            &UiTextInputPlaceholder,
+            &UiTextInputCursor,
+            Has<DisabledTextInput>,
+        ),
+        With<UiTextInput>,
+    >,
     mut texts: Query<(Entity, &mut Text, &mut TextColor), With<UiTextInputText>>,
 ) {
     for (text_entity, mut text, mut text_color) in &mut texts {
@@ -805,18 +894,26 @@ fn sync_text_input_display(
             continue;
         };
 
-        let Ok((value, placeholder)) = text_inputs.get(input_entity) else {
+        let Ok((value, placeholder, cursor, is_disabled)) = text_inputs.get(input_entity) else {
             continue;
         };
 
-        let (display, color) = if value.0.is_empty() {
-            (placeholder.0.as_str(), theme.colors.text_muted)
+        let is_focused = focus_state.focused_entity == Some(input_entity);
+        let display = if value.0.is_empty() && !is_focused {
+            placeholder.0.clone()
+        } else if is_focused && !is_disabled {
+            text_input_display_with_cursor(&value.0, cursor)
         } else {
-            (value.0.as_str(), theme.colors.text_primary)
+            value.0.clone()
+        };
+        let color = if is_disabled || value.0.is_empty() && !is_focused {
+            theme.colors.text_muted
+        } else {
+            theme.colors.text_primary
         };
 
         if text.0 != display {
-            text.0 = display.to_string();
+            text.0 = display;
         }
         if text_color.0 != color {
             text_color.0 = color;
@@ -832,17 +929,24 @@ fn update_text_input_visuals(
             &mut BackgroundColor,
             &mut BorderColor,
             Has<FocusedButton>,
+            Has<DisabledTextInput>,
         ),
         (With<Button>, With<UiTextInput>),
     >,
 ) {
-    for (interaction, mut background, mut border, is_focused) in &mut text_inputs {
-        let background_color = text_input_background_color(&theme, *interaction, is_focused);
+    for (interaction, mut background, mut border, is_focused, is_disabled) in &mut text_inputs {
+        let background_color =
+            text_input_background_color(&theme, *interaction, is_focused, is_disabled);
         if background.0 != background_color {
             *background = BackgroundColor(background_color);
         }
 
-        *border = BorderColor::all(text_input_border_color(&theme, *interaction, is_focused));
+        *border = BorderColor::all(text_input_border_color(
+            &theme,
+            *interaction,
+            is_focused,
+            is_disabled,
+        ));
     }
 }
 
@@ -850,7 +954,12 @@ fn text_input_background_color(
     theme: &UiTheme,
     interaction: Interaction,
     is_focused: bool,
+    is_disabled: bool,
 ) -> Color {
+    if is_disabled {
+        return theme.colors.secondary_button.disabled;
+    }
+
     match interaction {
         Interaction::Pressed => theme.colors.secondary_button.pressed,
         Interaction::Hovered => theme.colors.secondary_button.hovered,
@@ -859,7 +968,16 @@ fn text_input_background_color(
     }
 }
 
-fn text_input_border_color(theme: &UiTheme, interaction: Interaction, is_focused: bool) -> Color {
+fn text_input_border_color(
+    theme: &UiTheme,
+    interaction: Interaction,
+    is_focused: bool,
+    is_disabled: bool,
+) -> Color {
+    if is_disabled {
+        return theme.colors.secondary_button.disabled;
+    }
+
     match interaction {
         Interaction::Pressed => theme.colors.primary_button.pressed,
         Interaction::Hovered if is_focused => theme.colors.primary_button.focused,
@@ -869,10 +987,504 @@ fn text_input_border_color(theme: &UiTheme, interaction: Interaction, is_focused
     }
 }
 
+#[derive(Clone, Copy)]
+struct UiTextInputEditMode {
+    readonly: bool,
+    disabled: bool,
+    max_chars: Option<usize>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum UiTextInputEditAction<'a> {
+    Insert(&'a str),
+    Paste(&'a str),
+    Backspace,
+    Delete,
+    MoveLeft,
+    MoveRight,
+    MoveHome,
+    MoveEnd,
+    SelectAll,
+}
+
+enum UiTextInputEditEvent<'a> {
+    Edit(UiTextInputEditAction<'a>),
+    Copy,
+    Paste,
+    Submit,
+    None,
+}
+
+fn ui_text_input_edit_event<'a>(
+    keyboard_input: &'a KeyboardInput,
+    key_codes: &ButtonInput<KeyCode>,
+) -> UiTextInputEditEvent<'a> {
+    let is_control_pressed = key_codes.any_pressed([
+        KeyCode::ControlLeft,
+        KeyCode::ControlRight,
+        KeyCode::SuperLeft,
+        KeyCode::SuperRight,
+    ]);
+
+    if is_control_pressed {
+        match keyboard_input.key_code {
+            KeyCode::KeyA => return UiTextInputEditEvent::Edit(UiTextInputEditAction::SelectAll),
+            KeyCode::KeyC => return UiTextInputEditEvent::Copy,
+            KeyCode::KeyV => return UiTextInputEditEvent::Paste,
+            _ => {}
+        }
+    }
+
+    match &keyboard_input.logical_key {
+        Key::Enter => UiTextInputEditEvent::Submit,
+        Key::Backspace => UiTextInputEditEvent::Edit(UiTextInputEditAction::Backspace),
+        Key::Delete => UiTextInputEditEvent::Edit(UiTextInputEditAction::Delete),
+        Key::ArrowLeft => UiTextInputEditEvent::Edit(UiTextInputEditAction::MoveLeft),
+        Key::ArrowRight => UiTextInputEditEvent::Edit(UiTextInputEditAction::MoveRight),
+        Key::Home => UiTextInputEditEvent::Edit(UiTextInputEditAction::MoveHome),
+        Key::End => UiTextInputEditEvent::Edit(UiTextInputEditAction::MoveEnd),
+        Key::Space => {
+            if is_control_pressed {
+                UiTextInputEditEvent::None
+            } else {
+                UiTextInputEditEvent::Edit(UiTextInputEditAction::Insert(
+                    keyboard_input.text.as_deref().unwrap_or(" "),
+                ))
+            }
+        }
+        _ => {
+            if is_control_pressed {
+                return UiTextInputEditEvent::None;
+            }
+
+            if let Some(inserted_text) = keyboard_input
+                .text
+                .as_deref()
+                .filter(|text| text.chars().all(is_printable_char))
+            {
+                UiTextInputEditEvent::Edit(UiTextInputEditAction::Insert(inserted_text))
+            } else {
+                UiTextInputEditEvent::None
+            }
+        }
+    }
+}
+
+fn apply_text_input_edit(
+    value: &mut String,
+    cursor: &mut UiTextInputCursor,
+    action: UiTextInputEditAction,
+    mode: UiTextInputEditMode,
+) {
+    clamp_text_input_cursor(value, cursor);
+
+    if mode.disabled {
+        return;
+    }
+
+    match action {
+        UiTextInputEditAction::MoveLeft => {
+            cursor.selection = None;
+            cursor.position = previous_char_boundary(value, cursor.position);
+        }
+        UiTextInputEditAction::MoveRight => {
+            cursor.selection = None;
+            cursor.position = next_char_boundary(value, cursor.position);
+        }
+        UiTextInputEditAction::MoveHome => {
+            cursor.selection = None;
+            cursor.position = 0;
+        }
+        UiTextInputEditAction::MoveEnd => {
+            cursor.selection = None;
+            cursor.position = value.len();
+        }
+        UiTextInputEditAction::SelectAll => {
+            cursor.position = value.len();
+            cursor.selection = (!value.is_empty()).then_some(UiTextInputSelection {
+                start: 0,
+                end: value.len(),
+            });
+        }
+        UiTextInputEditAction::Insert(text) | UiTextInputEditAction::Paste(text) => {
+            if mode.readonly {
+                return;
+            }
+
+            replace_selection_or_insert(value, cursor, text, mode.max_chars);
+        }
+        UiTextInputEditAction::Backspace => {
+            if mode.readonly {
+                return;
+            }
+
+            if delete_selection(value, cursor) {
+                return;
+            }
+
+            let delete_from = previous_char_boundary(value, cursor.position);
+            if delete_from != cursor.position {
+                value.replace_range(delete_from..cursor.position, "");
+                cursor.position = delete_from;
+            }
+        }
+        UiTextInputEditAction::Delete => {
+            if mode.readonly {
+                return;
+            }
+
+            if delete_selection(value, cursor) {
+                return;
+            }
+
+            let delete_to = next_char_boundary(value, cursor.position);
+            if delete_to != cursor.position {
+                value.replace_range(cursor.position..delete_to, "");
+            }
+        }
+    }
+}
+
+fn replace_selection_or_insert(
+    value: &mut String,
+    cursor: &mut UiTextInputCursor,
+    text: &str,
+    max_chars: Option<usize>,
+) {
+    let (selection_start, selection_end) = selection_range(cursor)
+        .map(|selection| (selection.start, selection.end))
+        .unwrap_or((cursor.position, cursor.position));
+    let selected_chars = value[selection_start..selection_end].chars().count();
+    let current_chars = value.chars().count();
+    let available_chars = max_chars
+        .map(|max_chars| max_chars.saturating_sub(current_chars.saturating_sub(selected_chars)))
+        .unwrap_or(usize::MAX);
+    let inserted_text = text
+        .chars()
+        .filter(|chr| is_printable_char(*chr))
+        .take(available_chars)
+        .collect::<String>();
+
+    value.replace_range(selection_start..selection_end, &inserted_text);
+    cursor.position = selection_start + inserted_text.len();
+    cursor.selection = None;
+}
+
+fn delete_selection(value: &mut String, cursor: &mut UiTextInputCursor) -> bool {
+    let Some(selection) = selection_range(cursor) else {
+        cursor.selection = None;
+        return false;
+    };
+
+    value.replace_range(selection.start..selection.end, "");
+    cursor.position = selection.start;
+    cursor.selection = None;
+    true
+}
+
+fn selected_text(value: &str, cursor: &UiTextInputCursor) -> Option<String> {
+    let selection = selection_range(cursor)?;
+    Some(value[selection.start..selection.end].to_string())
+}
+
+fn selection_range(cursor: &UiTextInputCursor) -> Option<UiTextInputSelection> {
+    cursor
+        .selection
+        .filter(|selection| selection.start < selection.end)
+}
+
+fn clamp_text_input_cursor(value: &str, cursor: &mut UiTextInputCursor) {
+    cursor.position = nearest_char_boundary(value, cursor.position.min(value.len()));
+
+    cursor.selection = cursor.selection.and_then(|selection| {
+        let start = nearest_char_boundary(value, selection.start.min(value.len()));
+        let end = nearest_char_boundary(value, selection.end.min(value.len()));
+        (start < end).then_some(UiTextInputSelection { start, end })
+    });
+}
+
+fn previous_char_boundary(value: &str, position: usize) -> usize {
+    if position == 0 {
+        return 0;
+    }
+
+    value[..position]
+        .char_indices()
+        .last()
+        .map(|(index, _)| index)
+        .unwrap_or(0)
+}
+
+fn next_char_boundary(value: &str, position: usize) -> usize {
+    value[position..]
+        .char_indices()
+        .nth(1)
+        .map(|(offset, _)| position + offset)
+        .unwrap_or(value.len())
+}
+
+fn nearest_char_boundary(value: &str, position: usize) -> usize {
+    let mut position = position.min(value.len());
+    while position > 0 && !value.is_char_boundary(position) {
+        position -= 1;
+    }
+    position
+}
+
+fn text_input_display_with_cursor(value: &str, cursor: &UiTextInputCursor) -> String {
+    let cursor_position = nearest_char_boundary(value, cursor.position.min(value.len()));
+    let mut display = String::with_capacity(value.len() + 1);
+    display.push_str(&value[..cursor_position]);
+    display.push('|');
+    display.push_str(&value[cursor_position..]);
+    display
+}
+
 fn is_printable_char(chr: char) -> bool {
     let is_in_private_use_area = ('\u{e000}'..='\u{f8ff}').contains(&chr)
         || ('\u{f0000}'..='\u{ffffd}').contains(&chr)
         || ('\u{100000}'..='\u{10fffd}').contains(&chr);
 
     !is_in_private_use_area && !chr.is_ascii_control()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn editable(max_chars: Option<usize>) -> UiTextInputEditMode {
+        UiTextInputEditMode {
+            readonly: false,
+            disabled: false,
+            max_chars,
+        }
+    }
+
+    fn readonly() -> UiTextInputEditMode {
+        UiTextInputEditMode {
+            readonly: true,
+            disabled: false,
+            max_chars: None,
+        }
+    }
+
+    fn disabled() -> UiTextInputEditMode {
+        UiTextInputEditMode {
+            readonly: false,
+            disabled: true,
+            max_chars: None,
+        }
+    }
+
+    fn cursor(position: usize) -> UiTextInputCursor {
+        UiTextInputCursor {
+            position,
+            selection: None,
+        }
+    }
+
+    #[test]
+    fn insert_adds_text_at_cursor() {
+        let mut value = "ab".to_string();
+        let mut cursor = cursor(1);
+
+        apply_text_input_edit(
+            &mut value,
+            &mut cursor,
+            UiTextInputEditAction::Insert("X"),
+            editable(None),
+        );
+
+        assert_eq!(value, "aXb");
+        assert_eq!(cursor.position, 2);
+    }
+
+    #[test]
+    fn cursor_moves_left_right_and_home_end() {
+        let mut value = "abc".to_string();
+        let mut cursor = cursor(value.len());
+
+        apply_text_input_edit(
+            &mut value,
+            &mut cursor,
+            UiTextInputEditAction::MoveLeft,
+            editable(None),
+        );
+        assert_eq!(cursor.position, 2);
+
+        apply_text_input_edit(
+            &mut value,
+            &mut cursor,
+            UiTextInputEditAction::MoveRight,
+            editable(None),
+        );
+        assert_eq!(cursor.position, 3);
+
+        apply_text_input_edit(
+            &mut value,
+            &mut cursor,
+            UiTextInputEditAction::MoveHome,
+            editable(None),
+        );
+        assert_eq!(cursor.position, 0);
+
+        apply_text_input_edit(
+            &mut value,
+            &mut cursor,
+            UiTextInputEditAction::MoveEnd,
+            editable(None),
+        );
+        assert_eq!(cursor.position, value.len());
+    }
+
+    #[test]
+    fn backspace_deletes_before_cursor() {
+        let mut value = "abc".to_string();
+        let mut cursor = cursor(2);
+
+        apply_text_input_edit(
+            &mut value,
+            &mut cursor,
+            UiTextInputEditAction::Backspace,
+            editable(None),
+        );
+
+        assert_eq!(value, "ac");
+        assert_eq!(cursor.position, 1);
+    }
+
+    #[test]
+    fn delete_removes_after_cursor() {
+        let mut value = "abc".to_string();
+        let mut cursor = cursor(1);
+
+        apply_text_input_edit(
+            &mut value,
+            &mut cursor,
+            UiTextInputEditAction::Delete,
+            editable(None),
+        );
+
+        assert_eq!(value, "ac");
+        assert_eq!(cursor.position, 1);
+    }
+
+    #[test]
+    fn max_chars_limits_inserted_text() {
+        let mut value = "ab".to_string();
+        let mut cursor = cursor(value.len());
+
+        apply_text_input_edit(
+            &mut value,
+            &mut cursor,
+            UiTextInputEditAction::Insert("cde"),
+            editable(Some(4)),
+        );
+
+        assert_eq!(value, "abcd");
+        assert_eq!(cursor.position, value.len());
+    }
+
+    #[test]
+    fn selected_text_is_replaced_and_counts_against_max_chars() {
+        let mut value = "abcd".to_string();
+        let mut cursor = UiTextInputCursor {
+            position: 3,
+            selection: Some(UiTextInputSelection { start: 1, end: 3 }),
+        };
+
+        apply_text_input_edit(
+            &mut value,
+            &mut cursor,
+            UiTextInputEditAction::Insert("XYZ"),
+            editable(Some(5)),
+        );
+
+        assert_eq!(value, "aXYZd");
+        assert_eq!(cursor.position, 4);
+    }
+
+    #[test]
+    fn readonly_does_not_edit_but_allows_cursor_movement() {
+        let mut value = "abc".to_string();
+        let mut cursor = cursor(2);
+
+        apply_text_input_edit(
+            &mut value,
+            &mut cursor,
+            UiTextInputEditAction::Insert("X"),
+            readonly(),
+        );
+        apply_text_input_edit(
+            &mut value,
+            &mut cursor,
+            UiTextInputEditAction::Backspace,
+            readonly(),
+        );
+
+        assert_eq!(value, "abc");
+        assert_eq!(cursor.position, 2);
+
+        apply_text_input_edit(
+            &mut value,
+            &mut cursor,
+            UiTextInputEditAction::MoveLeft,
+            readonly(),
+        );
+
+        assert_eq!(value, "abc");
+        assert_eq!(cursor.position, 1);
+    }
+
+    #[test]
+    fn disabled_does_not_edit_or_move_cursor() {
+        let mut value = "abc".to_string();
+        let mut cursor = cursor(2);
+
+        apply_text_input_edit(
+            &mut value,
+            &mut cursor,
+            UiTextInputEditAction::Insert("X"),
+            disabled(),
+        );
+        apply_text_input_edit(
+            &mut value,
+            &mut cursor,
+            UiTextInputEditAction::MoveLeft,
+            disabled(),
+        );
+        apply_text_input_edit(
+            &mut value,
+            &mut cursor,
+            UiTextInputEditAction::Delete,
+            disabled(),
+        );
+
+        assert_eq!(value, "abc");
+        assert_eq!(cursor.position, 2);
+    }
+
+    #[test]
+    fn utf8_cursor_uses_char_boundaries() {
+        let mut value = "你a".to_string();
+        let mut cursor = cursor(value.len());
+
+        apply_text_input_edit(
+            &mut value,
+            &mut cursor,
+            UiTextInputEditAction::MoveLeft,
+            editable(None),
+        );
+        assert_eq!(cursor.position, "你".len());
+
+        apply_text_input_edit(
+            &mut value,
+            &mut cursor,
+            UiTextInputEditAction::Backspace,
+            editable(None),
+        );
+
+        assert_eq!(value, "a");
+        assert_eq!(cursor.position, 0);
+    }
 }

@@ -740,22 +740,31 @@ pub(in crate::game) struct UiInputState {
 - 已新增组件：
   - `UiTextInput`
   - `UiTextInputValue`
+  - `UiTextInputCursor`
   - `UiTextInputPlaceholder`
   - `UiTextInputText`
+  - `UiTextInputMaxChars`
+  - `ReadonlyTextInput`
+  - `DisabledTextInput`
 - 已新增提交消息 `UiTextInputSubmitted { entity, value }`；当前 `UiGallery` 在 Enter 提交时写日志，不绑定业务逻辑。
-- 文本输入基于 Bevy 0.18.1 的 `KeyboardInput` message：按下态读取 `keyboard_input.text` 追加可打印字符，`Key::Backspace` 删除末尾字符，`Key::Enter` 发送提交消息。
+- 文本输入基于 Bevy 0.18.1 的 `KeyboardInput` message：按下态读取 `keyboard_input.text` 插入可打印字符，支持左右移动、Home / End、Delete、Backspace、Space、Ctrl+A 全选、内部 Ctrl+C / Ctrl+V 复制粘贴和 Enter 提交。
+- 文本输入光标保存在 `UiTextInputCursor` 中，当前显示实现是在文本中插入 `|`，用于第一版可见光标位置。
+- `UiTextInputMaxChars` 支持按字符数限制输入长度；超出部分会在插入或粘贴时截断。
+- `ReadonlyTextInput` 不接受编辑、不发送提交，但允许焦点和光标移动；`DisabledTextInput` 不参与焦点遍历，不接受编辑、不发送提交，并使用禁用态视觉。
 - 显示文本节点单独带 `UiTextInputText` marker；内容变化时只刷新该文本节点，不重建页面或输入框根节点。
 - placeholder 在 value 为空时显示，并使用 muted 文本色；有 value 时显示当前值并使用 primary 文本色。
 - 输入框有 idle / hovered / pressed / focused 视觉状态，第一版复用现有 secondary button 背景色和 primary focused 边框色。
 - `UiInputState.pointer_blocked` 已识别当前聚焦的 `UiTextInput`，因此在 Touch Ripple 中输入文字时，玩法触控采集会被阻塞，不会同时触发水波纹。
-- `UiGallery` 已新增 Inputs 区域，展示一个带初始值的普通输入框和一个 placeholder 示例。
+- `UiGallery` 已新增 Inputs 区域，展示普通可编辑输入、只读输入、禁用输入、长度限制输入和 placeholder 示例。
 
 当前限制：
 
-- 第一版不支持光标、选区、复制粘贴、左右移动、Home/End、Delete、撤销、IME 组合态显示和密码输入。
-- 第一版没有 disabled / readonly 语义。
+- 当前不支持 IME 组合态显示。
+- 当前只支持 Ctrl+A 全选的内部选择状态，不支持 Shift+方向键、鼠标拖拽、多段选择或选区高亮样式。
+- 当前 Ctrl+C / Ctrl+V 只使用 UI 内部剪贴板缓存，不接入系统剪贴板。
+- 当前不支持撤销、密码输入或输入掩码。
 - 第一版 value 存在组件里；业务页面如需保存数据，应监听 `UiTextInputSubmitted` 或读取对应实体上的 `UiTextInputValue`。
-- 第一版没有显式长度限制、校验规则、错误态或表单布局协议。
+- 第一版没有校验规则、错误态或表单布局协议。
 
 ### UI 字体和中文字形修复
 
