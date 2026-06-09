@@ -36,6 +36,7 @@ impl Plugin for UiWidgetsPlugin {
                 Update,
                 (
                     sync_text_input_display,
+                    sync_text_input_form_messages,
                     update_button_visuals,
                     update_text_input_visuals,
                 )
@@ -92,11 +93,38 @@ pub(in crate::game) struct ReadonlyTextInput;
 #[derive(Component)]
 pub(in crate::game) struct DisabledTextInput;
 
+#[derive(Clone, Debug, Component)]
+pub(in crate::game) struct UiTextInputRequired {
+    message: String,
+}
+
+impl UiTextInputRequired {
+    pub(in crate::game) fn new(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+        }
+    }
+}
+
+#[derive(Component)]
+pub(in crate::game) struct UiTextInputError;
+
+#[derive(Clone, Debug, Default, Component)]
+pub(in crate::game) struct UiTextInputHelperText(pub String);
+
+#[derive(Clone, Debug, Default, Component)]
+pub(in crate::game) struct UiTextInputValidationMessage(pub String);
+
 #[derive(Clone, Debug, Default, Component)]
 pub(in crate::game) struct UiTextInputPlaceholder(pub String);
 
 #[derive(Component)]
 pub(in crate::game) struct UiTextInputText;
+
+#[derive(Clone, Copy, Debug, Component)]
+pub(in crate::game) struct UiTextInputFormMessage {
+    input: Entity,
+}
 
 #[derive(Debug, Default, Resource)]
 struct UiTextInputClipboard {
@@ -497,6 +525,7 @@ pub(in crate::game) fn text_input(
             Interaction::None,
             false,
             false,
+            false,
         )),
         children![(
             Text::new(display_text),
@@ -509,6 +538,24 @@ pub(in crate::game) fn text_input(
             UiTextInputText,
             UiThemeTextStyleRole::Button,
         )],
+    )
+}
+
+pub(in crate::game) fn text_input_form_message(
+    theme: &UiTheme,
+    fonts: &UiFontAssets,
+    input: Entity,
+) -> impl Bundle {
+    (
+        Text::new(""),
+        TextFont {
+            font: fonts.regular.clone(),
+            font_size: theme.text.caption,
+            ..default()
+        },
+        TextColor(theme.colors.text_muted),
+        UiTextInputFormMessage { input },
+        UiThemeTextStyleRole::Caption,
     )
 }
 
@@ -921,6 +968,50 @@ fn sync_text_input_display(
     }
 }
 
+fn sync_text_input_form_messages(
+    theme: Res<UiTheme>,
+    text_inputs: Query<(
+        &UiTextInputValue,
+        Option<&UiTextInputHelperText>,
+        Option<&UiTextInputValidationMessage>,
+        Option<&UiTextInputRequired>,
+        Has<UiTextInputError>,
+        Has<DisabledTextInput>,
+    )>,
+    mut messages: Query<(&UiTextInputFormMessage, &mut Text, &mut TextColor)>,
+) {
+    for (message, mut text, mut text_color) in &mut messages {
+        let Ok((value, helper_text, validation_message, required, has_error, is_disabled)) =
+            text_inputs.get(message.input)
+        else {
+            continue;
+        };
+
+        let state = text_input_form_state(
+            &value.0,
+            helper_text.map(|helper| helper.0.as_str()),
+            validation_message.map(|validation| validation.0.as_str()),
+            required,
+            has_error,
+        );
+        let display = state.message.unwrap_or_default();
+        let color = if is_disabled {
+            theme.colors.text_muted
+        } else if state.is_error {
+            theme.colors.text_error
+        } else {
+            theme.colors.text_muted
+        };
+
+        if text.0 != display {
+            text.0 = display;
+        }
+        if text_color.0 != color {
+            text_color.0 = color;
+        }
+    }
+}
+
 fn update_text_input_visuals(
     theme: Res<UiTheme>,
     mut text_inputs: Query<
@@ -930,11 +1021,32 @@ fn update_text_input_visuals(
             &mut BorderColor,
             Has<FocusedButton>,
             Has<DisabledTextInput>,
+            Has<UiTextInputError>,
+            &UiTextInputValue,
+            Option<&UiTextInputValidationMessage>,
+            Option<&UiTextInputRequired>,
         ),
         (With<Button>, With<UiTextInput>),
     >,
 ) {
-    for (interaction, mut background, mut border, is_focused, is_disabled) in &mut text_inputs {
+    for (
+        interaction,
+        mut background,
+        mut border,
+        is_focused,
+        is_disabled,
+        has_error,
+        value,
+        validation_message,
+        required,
+    ) in &mut text_inputs
+    {
+        let is_error = text_input_has_error(
+            &value.0,
+            validation_message.map(|message| message.0.as_str()),
+            required,
+            has_error,
+        );
         let background_color =
             text_input_background_color(&theme, *interaction, is_focused, is_disabled);
         if background.0 != background_color {
@@ -946,6 +1058,7 @@ fn update_text_input_visuals(
             *interaction,
             is_focused,
             is_disabled,
+            is_error,
         ));
     }
 }
@@ -973,9 +1086,14 @@ fn text_input_border_color(
     interaction: Interaction,
     is_focused: bool,
     is_disabled: bool,
+    is_error: bool,
 ) -> Color {
     if is_disabled {
         return theme.colors.secondary_button.disabled;
+    }
+
+    if is_error {
+        return theme.colors.error;
     }
 
     match interaction {
@@ -985,6 +1103,59 @@ fn text_input_border_color(
         Interaction::None if is_focused => theme.colors.primary_button.focused,
         Interaction::None => theme.colors.panel_border,
     }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct UiTextInputFormState {
+    message: Option<String>,
+    is_error: bool,
+}
+
+fn text_input_form_state(
+    value: &str,
+    helper_text: Option<&str>,
+    validation_message: Option<&str>,
+    required: Option<&UiTextInputRequired>,
+    has_error: bool,
+) -> UiTextInputFormState {
+    if let Some(message) = validation_message.filter(|message| !message.is_empty()) {
+        return UiTextInputFormState {
+            message: Some(message.to_string()),
+            is_error: true,
+        };
+    }
+
+    if has_error {
+        return UiTextInputFormState {
+            message: None,
+            is_error: true,
+        };
+    }
+
+    if let Some(required) = required
+        && value.is_empty()
+    {
+        return UiTextInputFormState {
+            message: (!required.message.is_empty()).then(|| required.message.clone()),
+            is_error: true,
+        };
+    }
+
+    UiTextInputFormState {
+        message: helper_text
+            .filter(|message| !message.is_empty())
+            .map(str::to_string),
+        is_error: false,
+    }
+}
+
+fn text_input_has_error(
+    value: &str,
+    validation_message: Option<&str>,
+    required: Option<&UiTextInputRequired>,
+    has_error: bool,
+) -> bool {
+    text_input_form_state(value, None, validation_message, required, has_error).is_error
 }
 
 #[derive(Clone, Copy)]
@@ -1283,6 +1454,10 @@ mod tests {
         }
     }
 
+    fn required(message: &str) -> UiTextInputRequired {
+        UiTextInputRequired::new(message)
+    }
+
     #[test]
     fn insert_adds_text_at_cursor() {
         let mut value = "ab".to_string();
@@ -1486,5 +1661,69 @@ mod tests {
 
         assert_eq!(value, "a");
         assert_eq!(cursor.position, 0);
+    }
+
+    #[test]
+    fn helper_text_displays_when_input_has_no_error() {
+        assert_eq!(
+            text_input_form_state("Pilot", Some("Visible helper"), None, None, false),
+            UiTextInputFormState {
+                message: Some("Visible helper".to_string()),
+                is_error: false,
+            }
+        );
+    }
+
+    #[test]
+    fn validation_message_overrides_helper_and_required() {
+        let required = required("Required");
+
+        assert_eq!(
+            text_input_form_state(
+                "",
+                Some("Helper"),
+                Some("Validation failed"),
+                Some(&required),
+                false,
+            ),
+            UiTextInputFormState {
+                message: Some("Validation failed".to_string()),
+                is_error: true,
+            }
+        );
+    }
+
+    #[test]
+    fn required_empty_value_generates_error_state() {
+        let required = required("Required");
+
+        assert_eq!(
+            text_input_form_state("", Some("Helper"), None, Some(&required), false),
+            UiTextInputFormState {
+                message: Some("Required".to_string()),
+                is_error: true,
+            }
+        );
+        assert_eq!(
+            text_input_form_state("Pilot", Some("Helper"), None, Some(&required), false),
+            UiTextInputFormState {
+                message: Some("Helper".to_string()),
+                is_error: false,
+            }
+        );
+    }
+
+    #[test]
+    fn disabled_border_color_overrides_error_state() {
+        let theme = UiTheme::default();
+
+        assert_eq!(
+            text_input_border_color(&theme, Interaction::None, true, true, true),
+            theme.colors.secondary_button.disabled
+        );
+        assert_eq!(
+            text_input_border_color(&theme, Interaction::None, true, false, true),
+            theme.colors.error
+        );
     }
 }

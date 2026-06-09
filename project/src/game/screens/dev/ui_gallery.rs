@@ -1,4 +1,4 @@
-use bevy::prelude::*;
+use bevy::{ecs::hierarchy::ChildSpawnerCommands, prelude::*};
 
 use crate::game::{
     navigation::AppUiMode,
@@ -21,11 +21,12 @@ use crate::game::{
         },
         widgets::{
             DisabledButton, DisabledTextInput, FocusedButton, LoadingButton, ReadonlyTextInput,
-            SelectedButton, UiTextInputMaxChars, UiTextInputSubmitted,
+            SelectedButton, UiTextInputError, UiTextInputHelperText, UiTextInputMaxChars,
+            UiTextInputRequired, UiTextInputSubmitted, UiTextInputValidationMessage,
             disabled_primary_action_button_key, disabled_secondary_action_button_key,
             loading_primary_action_button_key, primary_action_button_key, screen_label_key,
             screen_title_key, secondary_action_button_key, secondary_route_button_key, text_input,
-            ui_column, ui_grid, ui_scroll_column,
+            text_input_form_message, ui_column, ui_grid, ui_scroll_column,
         },
     },
 };
@@ -52,6 +53,16 @@ pub(super) struct GalleryFloatingI18n {
     title: UiI18nTextSpec,
     body: UiI18nTextSpec,
     detail: Option<UiI18nTextSpec>,
+}
+
+enum GalleryTextInputState {
+    Helper(String),
+    Required(String),
+    Validation(String),
+    Error,
+    MaxChars(usize),
+    Readonly,
+    Disabled,
 }
 
 impl GalleryLoadingPreview {
@@ -259,7 +270,8 @@ pub(super) fn setup_ui_gallery(
                         inputs_panel
                             .spawn(ui_column(theme.layout.row_gap))
                             .with_children(|inputs| {
-                                inputs.spawn(text_input(
+                                spawn_gallery_text_input(
+                                    inputs,
                                     theme,
                                     fonts,
                                     i18n.tr(
@@ -267,61 +279,117 @@ pub(super) fn setup_ui_gallery(
                                         "Player name",
                                     ),
                                     "Pilot 01",
-                                ));
-                                inputs.spawn((
-                                    text_input(
-                                        theme,
-                                        fonts,
-                                        i18n.tr(
-                                            "ui_gallery.inputs.placeholder.note",
-                                            "Type a note",
-                                        ),
-                                        "",
+                                    [GalleryTextInputState::Helper(i18n.tr(
+                                        "ui_gallery.inputs.helper.player_name",
+                                        "Shown to other players.",
+                                    ))],
+                                );
+                                spawn_gallery_text_input(
+                                    inputs,
+                                    theme,
+                                    fonts,
+                                    i18n.tr("ui_gallery.inputs.placeholder.required", "Required"),
+                                    "",
+                                    [
+                                        GalleryTextInputState::Required(i18n.tr(
+                                            "ui_gallery.inputs.validation.required",
+                                            "This field is required.",
+                                        )),
+                                        GalleryTextInputState::Helper(i18n.tr(
+                                            "ui_gallery.inputs.helper.required",
+                                            "Required fields validate empty values.",
+                                        )),
+                                    ],
+                                );
+                                spawn_gallery_text_input(
+                                    inputs,
+                                    theme,
+                                    fonts,
+                                    i18n.tr("ui_gallery.inputs.placeholder.error", "Error state"),
+                                    "bad-code",
+                                    [
+                                        GalleryTextInputState::Error,
+                                        GalleryTextInputState::Validation(i18n.tr(
+                                            "ui_gallery.inputs.validation.error",
+                                            "Use 4-8 letters or numbers.",
+                                        )),
+                                    ],
+                                );
+                                spawn_gallery_text_input(
+                                    inputs,
+                                    theme,
+                                    fonts,
+                                    i18n.tr("ui_gallery.inputs.placeholder.note", "Type a note"),
+                                    "",
+                                    [
+                                        GalleryTextInputState::MaxChars(12),
+                                        GalleryTextInputState::Helper(i18n.tr(
+                                            "ui_gallery.inputs.helper.note",
+                                            "Limited to 12 characters.",
+                                        )),
+                                    ],
+                                );
+                                spawn_gallery_text_input(
+                                    inputs,
+                                    theme,
+                                    fonts,
+                                    i18n.tr("ui_gallery.inputs.placeholder.readonly", "Read only"),
+                                    "Readonly sample",
+                                    [
+                                        GalleryTextInputState::Readonly,
+                                        GalleryTextInputState::Helper(i18n.tr(
+                                            "ui_gallery.inputs.helper.readonly",
+                                            "Readonly keeps focus but does not edit.",
+                                        )),
+                                    ],
+                                );
+                                spawn_gallery_text_input(
+                                    inputs,
+                                    theme,
+                                    fonts,
+                                    i18n.tr("ui_gallery.inputs.placeholder.disabled", "Disabled"),
+                                    "Disabled sample",
+                                    [
+                                        GalleryTextInputState::Disabled,
+                                        GalleryTextInputState::Error,
+                                        GalleryTextInputState::Validation(i18n.tr(
+                                            "ui_gallery.inputs.validation.disabled_error",
+                                            "Disabled visual state wins over error.",
+                                        )),
+                                    ],
+                                );
+                                spawn_gallery_text_input(
+                                    inputs,
+                                    theme,
+                                    fonts,
+                                    i18n.tr(
+                                        "ui_gallery.inputs.placeholder.short_code",
+                                        "Max 6 chars",
                                     ),
-                                    UiTextInputMaxChars(12),
-                                ));
-                                inputs.spawn((
-                                    text_input(
-                                        theme,
-                                        fonts,
-                                        i18n.tr(
-                                            "ui_gallery.inputs.placeholder.readonly",
-                                            "Read only",
-                                        ),
-                                        "Readonly sample",
-                                    ),
-                                    ReadonlyTextInput,
-                                ));
-                                inputs.spawn((
-                                    text_input(
-                                        theme,
-                                        fonts,
-                                        i18n.tr(
-                                            "ui_gallery.inputs.placeholder.disabled",
-                                            "Disabled",
-                                        ),
-                                        "Disabled sample",
-                                    ),
-                                    DisabledTextInput,
-                                ));
-                                inputs.spawn((
-                                    text_input(
-                                        theme,
-                                        fonts,
-                                        i18n.tr(
-                                            "ui_gallery.inputs.placeholder.short_code",
-                                            "Max 6 chars",
-                                        ),
-                                        "ABC",
-                                    ),
-                                    UiTextInputMaxChars(6),
-                                ));
-                                inputs.spawn(text_input(
+                                    "ABC",
+                                    [
+                                        GalleryTextInputState::MaxChars(6),
+                                        GalleryTextInputState::Required(i18n.tr(
+                                            "ui_gallery.inputs.validation.required",
+                                            "This field is required.",
+                                        )),
+                                        GalleryTextInputState::Helper(i18n.tr(
+                                            "ui_gallery.inputs.helper.short_code",
+                                            "Required, max 6 characters.",
+                                        )),
+                                    ],
+                                );
+                                spawn_gallery_text_input(
+                                    inputs,
                                     theme,
                                     fonts,
                                     i18n.tr("ui_gallery.inputs.placeholder.empty", "Empty input"),
                                     "",
-                                ));
+                                    [GalleryTextInputState::Helper(i18n.tr(
+                                        "ui_gallery.inputs.helper.empty",
+                                        "Optional empty field.",
+                                    ))],
+                                );
                             });
                     });
 
@@ -615,6 +683,49 @@ fn primary_route_button_sample(
         primary_action_button_key(theme, fonts, i18n, "ui_gallery.buttons.action", "Action"),
         Name::new("Gallery action sample"),
     )
+}
+
+fn spawn_gallery_text_input<const N: usize>(
+    inputs: &mut ChildSpawnerCommands,
+    theme: &UiTheme,
+    fonts: &UiFontAssets,
+    placeholder: String,
+    value: impl Into<String>,
+    states: [GalleryTextInputState; N],
+) {
+    inputs
+        .spawn(ui_column(theme.layout.row_gap * 0.5))
+        .with_children(|field| {
+            let mut input = field.spawn(text_input(theme, fonts, placeholder, value));
+            for state in states {
+                match state {
+                    GalleryTextInputState::Helper(message) => {
+                        input.insert(UiTextInputHelperText(message));
+                    }
+                    GalleryTextInputState::Required(message) => {
+                        input.insert(UiTextInputRequired::new(message));
+                    }
+                    GalleryTextInputState::Validation(message) => {
+                        input.insert(UiTextInputValidationMessage(message));
+                    }
+                    GalleryTextInputState::Error => {
+                        input.insert(UiTextInputError);
+                    }
+                    GalleryTextInputState::MaxChars(max_chars) => {
+                        input.insert(UiTextInputMaxChars(max_chars));
+                    }
+                    GalleryTextInputState::Readonly => {
+                        input.insert(ReadonlyTextInput);
+                    }
+                    GalleryTextInputState::Disabled => {
+                        input.insert(DisabledTextInput);
+                    }
+                }
+            }
+
+            let input_entity = input.id();
+            field.spawn(text_input_form_message(theme, fonts, input_entity));
+        });
 }
 
 fn gallery_confirm_modal(i18n: &UiI18n) -> UiConfirmModal {

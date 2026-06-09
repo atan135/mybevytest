@@ -8,6 +8,8 @@
         modal_overlay_background: (r: 0.01, g: 0.02, b: 0.03, a: 0.72),
         text_primary: (r: 0.92, g: 0.95, b: 0.95),
         text_muted: (r: 0.62, g: 0.68, b: 0.70),
+        text_error: (r: 1.0, g: 0.55, b: 0.52),
+        error: (r: 0.92, g: 0.26, b: 0.24),
         primary_button: (
             idle: (r: 0.12, g: 0.58, b: 0.52),
             hovered: (r: 0.15, g: 0.68, b: 0.60),

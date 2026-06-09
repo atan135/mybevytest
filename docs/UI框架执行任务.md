@@ -764,7 +764,30 @@ pub(in crate::game) struct UiInputState {
 - 当前 Ctrl+C / Ctrl+V 只使用 UI 内部剪贴板缓存，不接入系统剪贴板。
 - 当前不支持撤销、密码输入或输入掩码。
 - 第一版 value 存在组件里；业务页面如需保存数据，应监听 `UiTextInputSubmitted` 或读取对应实体上的 `UiTextInputValue`。
-- 第一版没有校验规则、错误态或表单布局协议。
+- 第一版没有完整表单容器、提交聚合、业务校验规则或表单布局协议；基础 helper / required / validation / error 状态见下方记录。
+
+### 表单状态和校验第一版
+
+- 已新增文本输入表单状态组件：
+  - `UiTextInputRequired`
+  - `UiTextInputError`
+  - `UiTextInputHelperText`
+  - `UiTextInputValidationMessage`
+  - `UiTextInputFormMessage`
+- 已新增 `text_input_form_message(...)` helper，用于创建绑定到文本输入实体的 helper / validation 文本节点。
+- 表单消息优先级为：显式 validation message > 显式 error marker > required 空值 > helper text。
+- 文本输入错误态会使用主题错误边框；表单错误消息使用主题错误文本色。
+- 禁用态视觉优先级高于错误态和焦点态：禁用输入框保持禁用背景、禁用边框和 muted 表单消息。
+- 主题新增 `colors.text_error` 和 `colors.error` token，并同步到内置默认主题与 `assets/ui/themes/default.ron`；旧版主题配置缺少这两个字段时会使用默认值。
+- `UiGallery` Inputs 区域已展示普通 helper、必填空值、显式错误、长度限制、只读、禁用覆盖错误和可选空输入样例。
+- 已补充中英文 i18n 资源和内置中文 fallback，覆盖新增输入框 placeholder、helper 和 validation 文案。
+- 已新增单元测试覆盖 helper 显示、validation 优先级、required 空值错误和 disabled/error 边框优先级。
+
+当前限制：
+
+- 当前只提供文本输入层面的状态表达，不提供完整 Form 容器、字段注册、统一 submit、dirty / touched 状态或跨字段校验。
+- `UiTextInputRequired` 只做空值校验；更复杂的校验由业务系统写入 `UiTextInputValidationMessage` 或 `UiTextInputError`。
+- helper / required / validation 组件保存的是已解析字符串；运行中 i18n 热加载不会自动改写这些组件里的字符串，后续需要 key 化表单消息组件才能完全跟随语言热刷新。
 
 ### UI 字体和中文字形修复
 

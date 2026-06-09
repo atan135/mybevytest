@@ -47,6 +47,8 @@ pub(in crate::game) struct UiColors {
     pub modal_overlay_background: Color,
     pub text_primary: Color,
     pub text_muted: Color,
+    pub text_error: Color,
+    pub error: Color,
     pub primary_button: ButtonColors,
     pub secondary_button: ButtonColors,
 }
@@ -272,6 +274,8 @@ impl Default for UiTheme {
                 modal_overlay_background: Color::srgba(0.01, 0.02, 0.03, 0.72),
                 text_primary: Color::srgb(0.92, 0.95, 0.95),
                 text_muted: Color::srgb(0.62, 0.68, 0.70),
+                text_error: Color::srgb(1.0, 0.55, 0.52),
+                error: Color::srgb(0.92, 0.26, 0.24),
                 primary_button: ButtonColors {
                     idle: Color::srgb(0.12, 0.58, 0.52),
                     hovered: Color::srgb(0.15, 0.68, 0.60),
@@ -363,6 +367,10 @@ struct UiColorsConfig {
     modal_overlay_background: UiColorConfig,
     text_primary: UiColorConfig,
     text_muted: UiColorConfig,
+    #[serde(default = "default_text_error")]
+    text_error: UiColorConfig,
+    #[serde(default = "default_error")]
+    error: UiColorConfig,
     primary_button: ButtonColorsConfig,
     secondary_button: ButtonColorsConfig,
 }
@@ -653,6 +661,24 @@ fn default_modal_overlay_background() -> UiColorConfig {
     }
 }
 
+fn default_text_error() -> UiColorConfig {
+    UiColorConfig {
+        r: 1.0,
+        g: 0.55,
+        b: 0.52,
+        a: 1.0,
+    }
+}
+
+fn default_error() -> UiColorConfig {
+    UiColorConfig {
+        r: 0.92,
+        g: 0.26,
+        b: 0.24,
+        a: 1.0,
+    }
+}
+
 impl UiThemeConfig {
     fn into_theme(self) -> UiTheme {
         UiTheme {
@@ -675,6 +701,8 @@ impl UiColorsConfig {
             modal_overlay_background: self.modal_overlay_background.into_color(),
             text_primary: self.text_primary.into_color(),
             text_muted: self.text_muted.into_color(),
+            text_error: self.text_error.into_color(),
+            error: self.error.into_color(),
             primary_button: self.primary_button.into_button_colors(),
             secondary_button: self.secondary_button.into_button_colors(),
         }
@@ -758,6 +786,8 @@ mod tests {
         modal_overlay_background: (r: 0.37, g: 0.38, b: 0.39, a: 0.73),
         text_primary: (r: 0.41, g: 0.42, b: 0.43),
         text_muted: (r: 0.51, g: 0.52, b: 0.53),
+        text_error: (r: 0.61, g: 0.12, b: 0.13),
+        error: (r: 0.71, g: 0.22, b: 0.23),
         primary_button: (
             idle: (r: 0.10, g: 0.20, b: 0.30),
             hovered: (r: 0.11, g: 0.21, b: 0.31),
@@ -826,6 +856,12 @@ mod tests {
             )
     }
 
+    fn legacy_theme_config_without_form_error_colors(version: u32) -> String {
+        valid_theme_config_with_version(version)
+            .replace("        text_error: (r: 0.61, g: 0.12, b: 0.13),\n", "")
+            .replace("        error: (r: 0.71, g: 0.22, b: 0.23),\n", "")
+    }
+
     fn load_config(source: &str) -> Result<UiTheme, String> {
         let temp = TempConfigDir::new("load_config");
         let path = temp.write_config("theme.ron", source);
@@ -881,6 +917,8 @@ mod tests {
             theme.colors.modal_overlay_background,
             (0.37, 0.38, 0.39, 0.73),
         );
+        assert_srgba(theme.colors.text_error, (0.61, 0.12, 0.13, 1.0));
+        assert_srgba(theme.colors.error, (0.71, 0.22, 0.23, 1.0));
         assert_srgba(theme.colors.primary_button.hovered, (0.11, 0.21, 0.31, 1.0));
         assert_eq!(theme.text.title_large, 52.0);
         assert_eq!(theme.layout.content_width, 760.0);
@@ -903,6 +941,17 @@ mod tests {
             theme.colors.modal_overlay_background,
             (0.01, 0.02, 0.03, 0.72),
         );
+    }
+
+    #[test]
+    fn parses_legacy_theme_config_without_form_error_colors() {
+        let theme = load_config(&legacy_theme_config_without_form_error_colors(
+            UI_THEME_CONFIG_VERSION,
+        ))
+        .unwrap();
+
+        assert_srgba(theme.colors.text_error, (1.0, 0.55, 0.52, 1.0));
+        assert_srgba(theme.colors.error, (0.92, 0.26, 0.24, 1.0));
     }
 
     #[test]
