@@ -2916,6 +2916,40 @@ mod tests {
     }
 
     #[test]
+    fn button_background_color_uses_documented_visual_priority() {
+        let colors = UiTheme::default().colors.primary_button;
+
+        assert_eq!(
+            button_background_color(colors, Interaction::Pressed, true, true, true, true),
+            colors.disabled
+        );
+        assert_eq!(
+            button_background_color(colors, Interaction::Pressed, false, true, true, true),
+            colors.loading
+        );
+        assert_eq!(
+            button_background_color(colors, Interaction::Pressed, false, true, true, false),
+            colors.pressed
+        );
+        assert_eq!(
+            button_background_color(colors, Interaction::Hovered, false, true, true, false),
+            colors.hovered
+        );
+        assert_eq!(
+            button_background_color(colors, Interaction::None, false, true, true, false),
+            colors.selected
+        );
+        assert_eq!(
+            button_background_color(colors, Interaction::None, false, true, false, false),
+            colors.focused
+        );
+        assert_eq!(
+            button_background_color(colors, Interaction::None, false, false, false, false),
+            colors.idle
+        );
+    }
+
+    #[test]
     fn selection_visual_state_prioritizes_disabled_and_selected_colors() {
         let colors = UiTheme::default().colors.secondary_button;
 
@@ -2949,6 +2983,52 @@ mod tests {
     }
 
     #[test]
+    fn selection_text_color_role_matches_disabled_state() {
+        assert!(matches!(
+            selection_button_text_color_role(SelectionVisualState::Disabled),
+            UiThemeTextColorRole::Muted
+        ));
+        assert!(matches!(
+            selection_button_text_color_role(SelectionVisualState::Selected),
+            UiThemeTextColorRole::Primary
+        ));
+        assert!(matches!(
+            selection_button_text_color_role(SelectionVisualState::Idle),
+            UiThemeTextColorRole::Primary
+        ));
+    }
+
+    #[test]
+    fn icon_button_background_and_text_roles_match_visual_state() {
+        let colors = UiTheme::default().colors.secondary_button;
+
+        assert_eq!(
+            icon_button_background_color(colors, IconButtonVisualState::Idle),
+            colors.idle
+        );
+        assert_eq!(
+            icon_button_background_color(colors, IconButtonVisualState::Disabled),
+            colors.disabled
+        );
+        assert_eq!(
+            icon_button_background_color(colors, IconButtonVisualState::Loading),
+            colors.loading
+        );
+        assert!(matches!(
+            icon_button_text_color_role(IconButtonVisualState::Idle),
+            UiThemeTextColorRole::Primary
+        ));
+        assert!(matches!(
+            icon_button_text_color_role(IconButtonVisualState::Loading),
+            UiThemeTextColorRole::Primary
+        ));
+        assert!(matches!(
+            icon_button_text_color_role(IconButtonVisualState::Disabled),
+            UiThemeTextColorRole::Muted
+        ));
+    }
+
+    #[test]
     fn icon_button_node_uses_stable_square_button_size() {
         let theme = UiTheme::default();
         let node = icon_button_node(&theme);
@@ -2973,6 +3053,19 @@ mod tests {
     }
 
     #[test]
+    fn slider_model_orders_bounds_clamps_nan_and_formats_values() {
+        let slider = UiSlider::new(f32::NAN, 100.0, 0.0);
+
+        assert_eq!(slider.min, 0.0);
+        assert_eq!(slider.max, 100.0);
+        assert_eq!(slider.value, 0.0);
+        assert_eq!(slider.ratio(), 0.0);
+        assert_eq!(format_slider_value(42.02), "42");
+        assert_eq!(format_slider_value(42.06), "42.1");
+        assert_eq!(format_slider_value(42.16), "42.2");
+    }
+
+    #[test]
     fn stepper_increment_and_decrement_clamp_to_bounds() {
         assert_eq!(stepper_increment_value(4, 1, 8, 2), 6);
         assert_eq!(stepper_increment_value(7, 1, 8, 2), 8);
@@ -2980,5 +3073,18 @@ mod tests {
         assert_eq!(stepper_decrement_value(2, 1, 8, 2), 1);
         assert_eq!(stepper_increment_value(4, 8, 1, -2), 6);
         assert_eq!(stepper_decrement_value(4, 8, 1, 0), 3);
+    }
+
+    #[test]
+    fn stepper_model_orders_bounds_clamps_value_and_normalizes_step() {
+        let stepper = UiStepper::new(20, 10, 1, -3);
+
+        assert_eq!(stepper.min, 1);
+        assert_eq!(stepper.max, 10);
+        assert_eq!(stepper.value, 10);
+        assert_eq!(stepper.step, 3);
+
+        let zero_stepper = UiStepper::new(5, 1, 10, 0);
+        assert_eq!(zero_stepper.step, 1);
     }
 }

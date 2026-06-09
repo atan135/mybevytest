@@ -857,6 +857,18 @@ pub(in crate::game) struct UiInputState {
 - 当前不实现 tooltip 系统，也不接入复杂 icon atlas；`accessible_label` 只作为组件状态保存，尚未桥接到平台无障碍树。
 - 当前只提供静态 builder 和视觉状态，不提供统一 icon button 业务事件协议。
 
+### P2-04 控件交互测试记录
+
+- 已补充 `project/src/game/ui/widgets/controls.rs` 单元测试，覆盖通用按钮视觉优先级 `disabled > loading > pressed > hovered > selected > focused > normal`。
+- 已补充 selection / icon button 纯逻辑测试，覆盖 disabled 文本色角色、selected / loading 背景色和 icon button 方形尺寸 helper。
+- 已补充 numeric 控件测试，覆盖 `UiSlider::new` 的边界排序、NaN 夹取、value 格式化，以及 `UiStepper::new` 的边界排序、value 夹取和 step 归一化。
+- 已补充 `project/src/game/ui/core/focus.rs` 单元测试，覆盖 `next_focus_entity` 前后循环、Tab / Shift+Tab 焦点移动、hidden / disabled / loading 过滤，以及 Modal panel 限制焦点候选。
+
+当前限制：
+
+- `project/src/game/ui/widgets/scroll.rs` 的滚动边界依赖 Bevy `ComputedNode` 布局结果，本次未新增窗口自动化或大规模 E2E；滚轮、拖拽滚动仍需要在 UiGallery 人工验证，后续如抽出纯滚动计算 helper 可再补单元测试。
+- 当前 icon button 的 `accessible_label` 热刷新仍通过 ECS 系统跟随 i18n 资源变化，本次只覆盖底层视觉 / 状态 helper；完整平台无障碍名称桥接仍是后续能力。
+
 ### UI 字体和中文字形修复
 
 - 已新增 UI 字体资源 `UiFontAssets` 和 `UiFontPlugin`，挂入 `UiFrameworkPlugin`。

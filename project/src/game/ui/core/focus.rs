@@ -293,3 +293,192 @@ fn panel_kind_order(kind: UiPanelKind) -> u8 {
         UiPanelKind::BlockingOverlay => 4,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::game::ui::core::UiPanelId;
+
+    fn entity(index: u32) -> Entity {
+        Entity::from_raw_u32(index).unwrap()
+    }
+
+    fn candidate(index: u32) -> FocusCandidate {
+        FocusCandidate {
+            entity: entity(index),
+            panel: None,
+        }
+    }
+
+    fn test_panel(kind: UiPanelKind) -> UiPanelRoot {
+        UiPanelRoot {
+            id: UiPanelId::UiGalleryPage,
+            kind,
+            owner_mode: None,
+        }
+    }
+
+    fn spawn_focusable_button(world: &mut World) -> Entity {
+        world
+            .spawn((
+                Button,
+                FocusableButton,
+                Interaction::None,
+                InheritedVisibility::VISIBLE,
+            ))
+            .id()
+    }
+
+    fn test_app() -> App {
+        let mut app = App::new();
+        app.init_resource::<ButtonInput<KeyCode>>()
+            .init_resource::<UiFocusState>()
+            .add_systems(
+                Update,
+                (
+                    focus_interacted_button,
+                    navigate_focus_with_tab,
+                    repair_invalid_focus,
+                    sync_focused_button_markers,
+                )
+                    .chain(),
+            );
+        app
+    }
+
+    fn press_tab(app: &mut App, shift: bool) {
+        {
+            let mut input = app.world_mut().resource_mut::<ButtonInput<KeyCode>>();
+            input.press(KeyCode::Tab);
+            if shift {
+                input.press(KeyCode::ShiftLeft);
+            }
+        }
+        app.update();
+        {
+            let mut input = app.world_mut().resource_mut::<ButtonInput<KeyCode>>();
+            input.release(KeyCode::Tab);
+            input.release(KeyCode::ShiftLeft);
+            input.clear();
+        }
+    }
+
+    #[test]
+    fn next_focus_entity_cycles_forward_and_backward() {
+        let candidates = [candidate(1), candidate(2), candidate(3)];
+
+        assert_eq!(next_focus_entity(&candidates, None, false), Some(entity(1)));
+        assert_eq!(
+            next_focus_entity(&candidates, Some(entity(1)), false),
+            Some(entity(2))
+        );
+        assert_eq!(
+            next_focus_entity(&candidates, Some(entity(3)), false),
+            Some(entity(1))
+        );
+        assert_eq!(next_focus_entity(&candidates, None, true), Some(entity(3)));
+        assert_eq!(
+            next_focus_entity(&candidates, Some(entity(1)), true),
+            Some(entity(3))
+        );
+    }
+
+    #[test]
+    fn tab_focus_skips_hidden_disabled_and_loading_buttons() {
+        let mut app = test_app();
+        let hidden = app
+            .world_mut()
+            .spawn((
+                Button,
+                FocusableButton,
+                Interaction::None,
+                InheritedVisibility::HIDDEN,
+            ))
+            .id();
+        let disabled = app
+            .world_mut()
+            .spawn((
+                Button,
+                FocusableButton,
+                DisabledButton,
+                Interaction::None,
+                InheritedVisibility::VISIBLE,
+            ))
+            .id();
+        let loading = app
+            .world_mut()
+            .spawn((
+                Button,
+                FocusableButton,
+                LoadingButton,
+                Interaction::None,
+                InheritedVisibility::VISIBLE,
+            ))
+            .id();
+        let visible = spawn_focusable_button(app.world_mut());
+
+        press_tab(&mut app, false);
+
+        let focus_state = app.world().resource::<UiFocusState>();
+        assert_eq!(focus_state.focused_entity, Some(visible));
+        assert!(app.world().entity(visible).contains::<FocusedButton>());
+        assert!(!app.world().entity(hidden).contains::<FocusedButton>());
+        assert!(!app.world().entity(disabled).contains::<FocusedButton>());
+        assert!(!app.world().entity(loading).contains::<FocusedButton>());
+    }
+
+    #[test]
+    fn tab_focus_cycles_and_shift_tab_moves_backward() {
+        let mut app = test_app();
+        let first = spawn_focusable_button(app.world_mut());
+        let second = spawn_focusable_button(app.world_mut());
+        let third = spawn_focusable_button(app.world_mut());
+        let mut expected_order = vec![first, second, third];
+        expected_order.sort();
+
+        press_tab(&mut app, false);
+        assert_eq!(
+            app.world().resource::<UiFocusState>().focused_entity,
+            Some(expected_order[0])
+        );
+
+        press_tab(&mut app, false);
+        assert_eq!(
+            app.world().resource::<UiFocusState>().focused_entity,
+            Some(expected_order[1])
+        );
+
+        press_tab(&mut app, true);
+        assert_eq!(
+            app.world().resource::<UiFocusState>().focused_entity,
+            Some(expected_order[0])
+        );
+
+        press_tab(&mut app, true);
+        assert_eq!(
+            app.world().resource::<UiFocusState>().focused_entity,
+            Some(expected_order[2])
+        );
+    }
+
+    #[test]
+    fn modal_panel_limits_focus_to_its_own_buttons() {
+        let mut app = test_app();
+        let page_button = spawn_focusable_button(app.world_mut());
+        let panel = app
+            .world_mut()
+            .spawn((test_panel(UiPanelKind::Modal), ZIndex(10)))
+            .id();
+        let modal_button = spawn_focusable_button(app.world_mut());
+        app.world_mut().entity_mut(panel).add_child(modal_button);
+
+        press_tab(&mut app, false);
+
+        assert_eq!(
+            app.world().resource::<UiFocusState>().focused_entity,
+            Some(modal_button)
+        );
+        assert!(!app.world().entity(page_button).contains::<FocusedButton>());
+        assert!(app.world().entity(modal_button).contains::<FocusedButton>());
+    }
+}
