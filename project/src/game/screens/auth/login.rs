@@ -4,20 +4,23 @@ use crate::game::{
     navigation::AppUiMode,
     ui::{
         core::{UiLayer, UiLayerRoot, UiPanelId, UiPanelKind, UiPanelRoot},
+        i18n::UiI18n,
         style::{
             UiTheme,
             theme::{UiThemeBackgroundRole, UiThemeBorderRole, UiThemeTextColorRole},
         },
-        widgets::{primary_route_button, screen_label, screen_title},
+        widgets::{primary_route_button_key, screen_label_key, screen_title_key},
     },
 };
 
 pub(super) fn setup_login_screen(
     mut commands: Commands,
     theme: Res<UiTheme>,
+    i18n: Res<UiI18n>,
     mut clear_color: ResMut<ClearColor>,
 ) {
     let theme = theme.into_inner();
+    let i18n = i18n.into_inner();
     clear_color.0 = theme.colors.screen_background;
 
     commands.spawn((
@@ -56,14 +59,22 @@ pub(super) fn setup_login_screen(
             UiThemeBackgroundRole::Panel,
             UiThemeBorderRole::Panel,
             children![
-                screen_title(theme, "MyBevy", theme.text.title_large),
-                screen_label(
+                screen_title_key(theme, i18n, "app.name", "MyBevy", theme.text.title_large),
+                screen_label_key(
                     theme,
+                    i18n,
+                    "auth.login.subtitle",
                     "Player Login",
                     theme.text.subtitle,
                     UiThemeTextColorRole::Muted,
                 ),
-                primary_route_button(theme, "Guest Login", AppUiMode::Lobby),
+                primary_route_button_key(
+                    theme,
+                    i18n,
+                    "auth.login.guest_login",
+                    "Guest Login",
+                    AppUiMode::Lobby,
+                ),
             ],
         )],
     ));

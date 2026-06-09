@@ -7,6 +7,7 @@ use crate::game::{
             UiFloatingPanel, UiLayer, UiLayerRoot, UiPanelCommand, UiPanelId, UiPanelKind,
             UiPanelRequest, UiPanelRoot,
         },
+        i18n::UiI18n,
         overlays::{
             UiConfirmModal, UiLoading, UiModalAction, UiModalActionSpec, UiModalActionStyle,
             UiModalId, UiRouteCommand, UiToast,
@@ -17,9 +18,10 @@ use crate::game::{
         },
         widgets::{
             DisabledButton, FocusedButton, LoadingButton, SelectedButton,
-            disabled_primary_action_button, disabled_secondary_action_button,
-            loading_primary_action_button, primary_action_button, screen_label, screen_title,
-            secondary_action_button, secondary_route_button, ui_column, ui_grid, ui_scroll_column,
+            disabled_primary_action_button_key, disabled_secondary_action_button_key,
+            loading_primary_action_button_key, primary_action_button_key, screen_label_key,
+            screen_title_key, secondary_action_button_key, secondary_route_button_key, ui_column,
+            ui_grid, ui_scroll_column,
         },
     },
 };
@@ -51,9 +53,11 @@ impl GalleryLoadingPreview {
 pub(super) fn setup_ui_gallery(
     mut commands: Commands,
     theme: Res<UiTheme>,
+    i18n: Res<UiI18n>,
     mut clear_color: ResMut<ClearColor>,
 ) {
     let theme = theme.into_inner();
+    let i18n = i18n.into_inner();
     clear_color.0 = theme.colors.screen_background;
 
     commands
@@ -80,41 +84,68 @@ pub(super) fn setup_ui_gallery(
         ))
         .with_children(|root| {
             root.spawn(gallery_header(theme)).with_children(|header| {
-                header.spawn(screen_title(theme, "UI Gallery", theme.text.title));
-                header.spawn(secondary_route_button(theme, "Lobby", AppUiMode::Lobby));
+                header.spawn(screen_title_key(
+                    theme,
+                    i18n,
+                    "ui_gallery.title",
+                    "UI Gallery",
+                    theme.text.title,
+                ));
+                header.spawn(secondary_route_button_key(
+                    theme,
+                    i18n,
+                    "nav.lobby",
+                    "Lobby",
+                    AppUiMode::Lobby,
+                ));
             });
 
             root.spawn(ui_scroll_column(theme)).with_children(|body| {
                 body.spawn(gallery_panel(theme))
                     .with_children(|typography_panel| {
-                        typography_panel.spawn(section_label(theme, "Typography"));
+                        typography_panel.spawn(section_label_key(
+                            theme,
+                            i18n,
+                            "ui_gallery.typography.section",
+                            "Typography",
+                        ));
                         typography_panel
                             .spawn(ui_column(theme.layout.row_gap))
                             .with_children(|samples| {
-                                samples.spawn(screen_title(
+                                samples.spawn(screen_title_key(
                                     theme,
+                                    i18n,
+                                    "ui_gallery.typography.large_title",
                                     "Large Title",
                                     theme.text.title_large,
                                 ));
-                                samples.spawn(screen_title(
+                                samples.spawn(screen_title_key(
                                     theme,
+                                    i18n,
+                                    "ui_gallery.typography.section_title",
                                     "Section Title",
                                     theme.text.title,
                                 ));
-                                samples.spawn(screen_label(
+                                samples.spawn(screen_label_key(
                                     theme,
+                                    i18n,
+                                    "ui_gallery.typography.subtitle",
                                     "Subtitle text",
                                     theme.text.subtitle,
                                     UiThemeTextColorRole::Muted,
                                 ));
-                                samples.spawn(screen_label(
+                                samples.spawn(screen_label_key(
                                     theme,
+                                    i18n,
+                                    "ui_gallery.typography.body",
                                     "Body text",
                                     theme.text.body,
                                     UiThemeTextColorRole::Primary,
                                 ));
-                                samples.spawn(screen_label(
+                                samples.spawn(screen_label_key(
                                     theme,
+                                    i18n,
+                                    "ui_gallery.typography.caption",
                                     "Caption text",
                                     theme.text.caption,
                                     UiThemeTextColorRole::Muted,
@@ -124,60 +155,139 @@ pub(super) fn setup_ui_gallery(
 
                 body.spawn(gallery_panel(theme))
                     .with_children(|buttons_panel| {
-                        buttons_panel.spawn(section_label(theme, "Buttons"));
+                        buttons_panel.spawn(section_label_key(
+                            theme,
+                            i18n,
+                            "ui_gallery.buttons.section",
+                            "Buttons",
+                        ));
                         buttons_panel
                             .spawn(ui_grid(theme, 4))
                             .with_children(|buttons| {
-                                buttons.spawn(primary_action_button(theme, "Primary"));
-                                buttons.spawn(secondary_action_button(theme, "Secondary"));
+                                buttons.spawn(primary_action_button_key(
+                                    theme,
+                                    i18n,
+                                    "ui_gallery.buttons.primary",
+                                    "Primary",
+                                ));
+                                buttons.spawn(secondary_action_button_key(
+                                    theme,
+                                    i18n,
+                                    "ui_gallery.buttons.secondary",
+                                    "Secondary",
+                                ));
                                 buttons.spawn((
-                                    primary_action_button(theme, "Focused"),
+                                    primary_action_button_key(
+                                        theme,
+                                        i18n,
+                                        "ui_gallery.buttons.focused",
+                                        "Focused",
+                                    ),
                                     FocusedButton,
                                 ));
                                 buttons.spawn((
-                                    secondary_action_button(theme, "Selected"),
+                                    secondary_action_button_key(
+                                        theme,
+                                        i18n,
+                                        "ui_gallery.buttons.selected",
+                                        "Selected",
+                                    ),
                                     SelectedButton,
                                 ));
-                                buttons.spawn(loading_primary_action_button(theme, "Loading"));
-                                buttons.spawn(disabled_primary_action_button(theme, "Disabled"));
-                                buttons
-                                    .spawn(disabled_secondary_action_button(theme, "Unavailable"));
-                                buttons.spawn(primary_route_button_sample(theme));
+                                buttons.spawn(loading_primary_action_button_key(
+                                    theme,
+                                    i18n,
+                                    "ui_gallery.buttons.loading",
+                                    "Loading",
+                                ));
+                                buttons.spawn(disabled_primary_action_button_key(
+                                    theme,
+                                    i18n,
+                                    "ui_gallery.buttons.disabled",
+                                    "Disabled",
+                                ));
+                                buttons.spawn(disabled_secondary_action_button_key(
+                                    theme,
+                                    i18n,
+                                    "ui_gallery.buttons.unavailable",
+                                    "Unavailable",
+                                ));
+                                buttons.spawn(primary_route_button_sample(theme, i18n));
                             });
                     });
 
                 body.spawn(gallery_panel(theme))
                     .with_children(|overlays_panel| {
-                        overlays_panel.spawn(section_label(theme, "Overlays"));
+                        overlays_panel.spawn(section_label_key(
+                            theme,
+                            i18n,
+                            "ui_gallery.overlays.section",
+                            "Overlays",
+                        ));
                         overlays_panel
                             .spawn(ui_grid(theme, 4))
                             .with_children(|buttons| {
                                 buttons.spawn((
-                                    primary_action_button(theme, "Show Toast"),
+                                    primary_action_button_key(
+                                        theme,
+                                        i18n,
+                                        "ui_gallery.overlays.show_toast",
+                                        "Show Toast",
+                                    ),
                                     GalleryActionButton::Toast,
                                 ));
                                 buttons.spawn((
-                                    secondary_action_button(theme, "Loading"),
+                                    secondary_action_button_key(
+                                        theme,
+                                        i18n,
+                                        "ui_gallery.overlays.loading",
+                                        "Loading",
+                                    ),
                                     GalleryActionButton::ShowLoading,
                                 ));
                                 buttons.spawn((
-                                    secondary_action_button(theme, "Cancelable"),
+                                    secondary_action_button_key(
+                                        theme,
+                                        i18n,
+                                        "ui_gallery.overlays.cancelable",
+                                        "Cancelable",
+                                    ),
                                     GalleryActionButton::ShowCancellableLoading,
                                 ));
                                 buttons.spawn((
-                                    secondary_action_button(theme, "Hide"),
+                                    secondary_action_button_key(
+                                        theme,
+                                        i18n,
+                                        "ui_gallery.overlays.hide",
+                                        "Hide",
+                                    ),
                                     GalleryActionButton::HideLoading,
                                 ));
                                 buttons.spawn((
-                                    primary_action_button(theme, "Show Confirm"),
+                                    primary_action_button_key(
+                                        theme,
+                                        i18n,
+                                        "ui_gallery.overlays.show_confirm",
+                                        "Show Confirm",
+                                    ),
                                     GalleryActionButton::Confirm,
                                 ));
                                 buttons.spawn((
-                                    secondary_action_button(theme, "Show Floating"),
+                                    secondary_action_button_key(
+                                        theme,
+                                        i18n,
+                                        "ui_gallery.overlays.show_floating",
+                                        "Show Floating",
+                                    ),
                                     GalleryActionButton::Floating,
                                 ));
                                 buttons.spawn((
-                                    secondary_action_button(theme, "Close Top"),
+                                    secondary_action_button_key(
+                                        theme,
+                                        i18n,
+                                        "ui_gallery.overlays.close_top",
+                                        "Close Top",
+                                    ),
                                     GalleryActionButton::CloseTop,
                                 ));
                             });
@@ -297,18 +407,25 @@ fn gallery_panel(theme: &UiTheme) -> impl Bundle {
     )
 }
 
-fn section_label(theme: &UiTheme, text: impl Into<String>) -> impl Bundle {
-    screen_label(
+fn section_label_key(
+    theme: &UiTheme,
+    i18n: &UiI18n,
+    key: &'static str,
+    fallback: &'static str,
+) -> impl Bundle {
+    screen_label_key(
         theme,
-        text,
+        i18n,
+        key,
+        fallback,
         theme.text.section_label,
         UiThemeTextColorRole::Muted,
     )
 }
 
-fn primary_route_button_sample(theme: &UiTheme) -> impl Bundle {
+fn primary_route_button_sample(theme: &UiTheme, i18n: &UiI18n) -> impl Bundle {
     (
-        primary_action_button(theme, "Action"),
+        primary_action_button_key(theme, i18n, "ui_gallery.buttons.action", "Action"),
         Name::new("Gallery action sample"),
     )
 }

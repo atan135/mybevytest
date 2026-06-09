@@ -8,6 +8,7 @@ use crate::game::{
             UiLayer, UiLayerRoot, UiPanelCommand, UiPanelId, UiPanelKind, UiPanelRequest,
             UiPanelRoot,
         },
+        i18n::UiI18n,
         overlays::{
             UiConfirmModal, UiModalAction, UiModalActionSpec, UiModalActionStyle, UiModalId,
             UiModalResult, UiRouteCommand, UiToast,
@@ -17,8 +18,8 @@ use crate::game::{
             theme::{UiThemeBackgroundRole, UiThemeBorderRole, UiThemeTextColorRole},
         },
         widgets::{
-            DisabledButton, LoadingButton, primary_action_button, screen_label, screen_title,
-            secondary_route_button,
+            DisabledButton, LoadingButton, primary_action_button_key, screen_label_key,
+            screen_title_key, secondary_route_button_key,
         },
     },
 };
@@ -29,9 +30,11 @@ pub(super) struct TouchRipplePlayButton;
 pub(super) fn setup_game_list_screen(
     mut commands: Commands,
     theme: Res<UiTheme>,
+    i18n: Res<UiI18n>,
     mut clear_color: ResMut<ClearColor>,
 ) {
     let theme = theme.into_inner();
+    let i18n = i18n.into_inner();
     clear_color.0 = theme.colors.screen_background;
 
     commands.spawn((
@@ -66,7 +69,7 @@ pub(super) fn setup_game_list_screen(
                     ..default()
                 },
                 children![
-                    screen_title(theme, "Game List", theme.text.title),
+                    screen_title_key(theme, i18n, "lobby.title", "Game List", theme.text.title),
                     (
                         Node {
                             align_items: AlignItems::Center,
@@ -74,8 +77,20 @@ pub(super) fn setup_game_list_screen(
                             ..default()
                         },
                         children![
-                            secondary_route_button(theme, "UI Gallery", AppUiMode::UiGallery),
-                            secondary_route_button(theme, "Logout", AppUiMode::Login),
+                            secondary_route_button_key(
+                                theme,
+                                i18n,
+                                "nav.ui_gallery",
+                                "UI Gallery",
+                                AppUiMode::UiGallery,
+                            ),
+                            secondary_route_button_key(
+                                theme,
+                                i18n,
+                                "nav.logout",
+                                "Logout",
+                                AppUiMode::Login,
+                            ),
                         ],
                     ),
                 ],
@@ -97,8 +112,10 @@ pub(super) fn setup_game_list_screen(
                 UiThemeBackgroundRole::Panel,
                 UiThemeBorderRole::Panel,
                 children![
-                    screen_label(
+                    screen_label_key(
                         theme,
+                        i18n,
+                        "lobby.available",
                         "Available",
                         theme.text.section_label,
                         UiThemeTextColorRole::Muted,
@@ -121,21 +138,28 @@ pub(super) fn setup_game_list_screen(
                                     ..default()
                                 },
                                 children![
-                                    screen_label(
+                                    screen_label_key(
                                         theme,
+                                        i18n,
+                                        "lobby.touch_ripple.title",
                                         "Touch Ripple",
                                         theme.text.body,
                                         UiThemeTextColorRole::Primary,
                                     ),
-                                    screen_label(
+                                    screen_label_key(
                                         theme,
+                                        i18n,
+                                        "lobby.touch_ripple.description",
                                         "Current prototype",
                                         theme.text.caption,
                                         UiThemeTextColorRole::Muted,
                                     ),
                                 ],
                             ),
-                            (primary_action_button(theme, "Play"), TouchRipplePlayButton,),
+                            (
+                                primary_action_button_key(theme, i18n, "lobby.play", "Play"),
+                                TouchRipplePlayButton,
+                            ),
                         ],
                     ),
                 ],
