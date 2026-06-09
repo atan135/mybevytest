@@ -4,7 +4,10 @@ use crate::game::{
     navigation::AppUiMode,
     ui::{
         core::{UiLayer, UiLayerRoot, UiPanelId, UiPanelKind, UiPanelRoot},
-        style::UiTheme,
+        style::{
+            UiTheme,
+            theme::{UiThemeBackgroundRole, UiThemeBorderRole, UiThemeTextColorRole},
+        },
         widgets::{primary_route_button, screen_label, screen_title},
     },
 };
@@ -36,6 +39,7 @@ pub(super) fn setup_login_screen(
             ..default()
         },
         BackgroundColor(theme.colors.screen_background),
+        UiThemeBackgroundRole::Screen,
         children![(
             Node {
                 width: percent(100),
@@ -49,9 +53,16 @@ pub(super) fn setup_login_screen(
             },
             BackgroundColor(theme.colors.panel_background),
             BorderColor::all(theme.colors.panel_border),
+            UiThemeBackgroundRole::Panel,
+            UiThemeBorderRole::Panel,
             children![
                 screen_title(theme, "MyBevy", theme.text.title_large),
-                screen_label("Player Login", theme.text.subtitle, theme.colors.text_muted),
+                screen_label(
+                    theme,
+                    "Player Login",
+                    theme.text.subtitle,
+                    UiThemeTextColorRole::Muted,
+                ),
                 primary_route_button(theme, "Guest Login", AppUiMode::Lobby),
             ],
         )],

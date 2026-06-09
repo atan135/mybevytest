@@ -12,7 +12,10 @@ use crate::game::{
             UiConfirmModal, UiModalAction, UiModalActionSpec, UiModalActionStyle, UiModalId,
             UiModalResult, UiRouteCommand, UiToast,
         },
-        style::UiTheme,
+        style::{
+            UiTheme,
+            theme::{UiThemeBackgroundRole, UiThemeBorderRole, UiThemeTextColorRole},
+        },
         widgets::{
             DisabledButton, LoadingButton, primary_action_button, screen_label, screen_title,
             secondary_route_button,
@@ -50,6 +53,7 @@ pub(super) fn setup_game_list_screen(
             ..default()
         },
         BackgroundColor(theme.colors.screen_background),
+        UiThemeBackgroundRole::Screen,
         children![
             (
                 Node {
@@ -90,11 +94,14 @@ pub(super) fn setup_game_list_screen(
                 },
                 BackgroundColor(theme.colors.panel_background),
                 BorderColor::all(theme.colors.panel_border),
+                UiThemeBackgroundRole::Panel,
+                UiThemeBorderRole::Panel,
                 children![
                     screen_label(
+                        theme,
                         "Available",
                         theme.text.section_label,
-                        theme.colors.text_muted
+                        UiThemeTextColorRole::Muted,
                     ),
                     (
                         Node {
@@ -115,14 +122,16 @@ pub(super) fn setup_game_list_screen(
                                 },
                                 children![
                                     screen_label(
+                                        theme,
                                         "Touch Ripple",
                                         theme.text.body,
-                                        theme.colors.text_primary,
+                                        UiThemeTextColorRole::Primary,
                                     ),
                                     screen_label(
+                                        theme,
                                         "Current prototype",
                                         theme.text.caption,
-                                        theme.colors.text_muted,
+                                        UiThemeTextColorRole::Muted,
                                     ),
                                 ],
                             ),

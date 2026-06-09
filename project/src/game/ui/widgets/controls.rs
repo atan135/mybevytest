@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use crate::game::{
     navigation::{AppUiMode, RouteButton},
     ui::{
-        style::theme::{ButtonColors, UiTheme},
+        style::theme::{ButtonColors, UiTheme, UiThemeTextColorRole},
         widgets::scroll::UiScrollPlugin,
     },
 };
@@ -47,13 +47,15 @@ pub(in crate::game) fn screen_title(
             ..default()
         },
         TextColor(theme.colors.text_primary),
+        UiThemeTextColorRole::Primary,
     )
 }
 
 pub(in crate::game) fn screen_label(
+    theme: &UiTheme,
     text: impl Into<String>,
     font_size: f32,
-    color: Color,
+    color_role: UiThemeTextColorRole,
 ) -> impl Bundle {
     (
         Text::new(text),
@@ -61,7 +63,8 @@ pub(in crate::game) fn screen_label(
             font_size,
             ..default()
         },
-        TextColor(color),
+        TextColor(color_role.color(theme)),
+        color_role,
     )
 }
 
@@ -159,6 +162,7 @@ fn route_button<T: Component>(
                 ..default()
             },
             TextColor(theme.colors.text_primary),
+            UiThemeTextColorRole::Primary,
         )],
     )
 }
@@ -189,6 +193,7 @@ fn action_button<T: Component>(
                 ..default()
             },
             TextColor(theme.colors.text_primary),
+            UiThemeTextColorRole::Primary,
         )],
     )
 }
@@ -220,6 +225,7 @@ fn disabled_action_button<T: Component>(
                 ..default()
             },
             TextColor(theme.colors.text_muted),
+            UiThemeTextColorRole::Muted,
         )],
     )
 }

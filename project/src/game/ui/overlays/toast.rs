@@ -2,7 +2,10 @@ use bevy::prelude::*;
 
 use crate::game::ui::{
     core::{UiLayer, UiLayerRoot},
-    style::UiTheme,
+    style::{
+        UiTheme,
+        theme::{UiThemeBackgroundRole, UiThemeBorderRole, UiThemeTextColorRole},
+    },
     widgets::screen_label,
 };
 
@@ -69,10 +72,13 @@ pub(in crate::game) fn spawn_toast(commands: &mut Commands, theme: &UiTheme, toa
             },
             BackgroundColor(theme.colors.panel_background),
             BorderColor::all(theme.colors.panel_border),
+            UiThemeBackgroundRole::Panel,
+            UiThemeBorderRole::Panel,
             children![screen_label(
+                theme,
                 toast.text.clone(),
                 theme.text.caption,
-                theme.colors.text_primary,
+                UiThemeTextColorRole::Primary,
             )],
         )],
     ));

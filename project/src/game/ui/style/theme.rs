@@ -3,21 +3,29 @@ use serde::Deserialize;
 use std::{
     env, fs, io,
     path::{Path, PathBuf},
+    time::SystemTime,
 };
 
 const UI_THEME_CONFIG_VERSION: u32 = 1;
 const DEFAULT_THEME_ASSET_PATH: &str = "assets/ui/themes/default.ron";
 const REPO_ROOT_THEME_ASSET_PATH: &str = "project/assets/ui/themes/default.ron";
 const UI_THEME_ENV_VAR: &str = "MYBEVY_UI_THEME";
+const UI_THEME_HOT_RELOAD_INTERVAL_SECS: f32 = 0.8;
 
 pub(in crate::game) struct UiThemePlugin;
 
 impl Plugin for UiThemePlugin {
     fn build(&self, app: &mut App) {
         let (theme, source) = load_ui_theme();
+        let hot_reload = UiThemeHotReload::new(&source);
         app.insert_resource(theme)
             .insert_resource(source)
-            .add_systems(Startup, log_ui_theme_source);
+            .insert_resource(hot_reload)
+            .add_systems(Startup, log_ui_theme_source)
+            .add_systems(
+                Update,
+                (poll_ui_theme_hot_reload, refresh_ui_theme_visuals).chain(),
+            );
     }
 }
 
@@ -93,6 +101,49 @@ pub(in crate::game) struct ButtonColors {
     pub loading: Color,
 }
 
+#[derive(Clone, Copy, Debug, Component)]
+pub(in crate::game) enum UiThemeBackgroundRole {
+    Screen,
+    Panel,
+}
+
+#[derive(Clone, Copy, Debug, Component)]
+pub(in crate::game) enum UiThemeBorderRole {
+    Panel,
+}
+
+#[derive(Clone, Copy, Debug, Component)]
+pub(in crate::game) enum UiThemeTextColorRole {
+    Primary,
+    Muted,
+}
+
+impl UiThemeBackgroundRole {
+    fn color(self, theme: &UiTheme) -> Color {
+        match self {
+            Self::Screen => theme.colors.screen_background,
+            Self::Panel => theme.colors.panel_background,
+        }
+    }
+}
+
+impl UiThemeBorderRole {
+    fn color(self, theme: &UiTheme) -> Color {
+        match self {
+            Self::Panel => theme.colors.panel_border,
+        }
+    }
+}
+
+impl UiThemeTextColorRole {
+    pub(in crate::game) fn color(self, theme: &UiTheme) -> Color {
+        match self {
+            Self::Primary => theme.colors.text_primary,
+            Self::Muted => theme.colors.text_muted,
+        }
+    }
+}
+
 impl Default for UiTheme {
     fn default() -> Self {
         Self {
@@ -164,6 +215,14 @@ struct UiThemeSource {
     diagnostics: Vec<String>,
 }
 
+#[derive(Debug, Resource)]
+struct UiThemeHotReload {
+    watched_path: PathBuf,
+    last_modified: Option<SystemTime>,
+    poll_timer: Timer,
+    last_error: Option<String>,
+}
+
 #[derive(Debug, Deserialize)]
 struct UiThemeConfig {
     version: u32,
@@ -209,39 +268,17 @@ fn load_ui_theme() -> (UiTheme, UiThemeSource) {
     let mut diagnostics = Vec::new();
 
     for path in ui_theme_path_candidates() {
-        let source = match fs::read_to_string(&path) {
-            Ok(source) => source,
-            Err(error) if error.kind() == io::ErrorKind::NotFound => {
-                diagnostics.push(format!("{} not found", path.display()));
-                continue;
-            }
-            Err(error) => {
-                diagnostics.push(format!("{} could not be read: {error}", path.display()));
-                continue;
-            }
-        };
-
-        match ron::from_str::<UiThemeConfig>(&source) {
-            Ok(config) if config.version == UI_THEME_CONFIG_VERSION => {
+        match load_ui_theme_from_path(&path) {
+            Ok(theme) => {
                 return (
-                    config.into_theme(),
+                    theme,
                     UiThemeSource {
                         loaded_path: Some(path),
                         diagnostics,
                     },
                 );
             }
-            Ok(config) => {
-                diagnostics.push(format!(
-                    "{} uses unsupported version {}, expected {}",
-                    path.display(),
-                    config.version,
-                    UI_THEME_CONFIG_VERSION
-                ));
-            }
-            Err(error) => {
-                diagnostics.push(format!("{} could not be parsed: {error}", path.display()));
-            }
+            Err(error) => diagnostics.push(error),
         }
     }
 
@@ -252,6 +289,29 @@ fn load_ui_theme() -> (UiTheme, UiThemeSource) {
             diagnostics,
         },
     )
+}
+
+fn load_ui_theme_from_path(path: &Path) -> Result<UiTheme, String> {
+    let source = match fs::read_to_string(path) {
+        Ok(source) => source,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            return Err(format!("{} not found", path.display()));
+        }
+        Err(error) => {
+            return Err(format!("{} could not be read: {error}", path.display()));
+        }
+    };
+
+    match ron::from_str::<UiThemeConfig>(&source) {
+        Ok(config) if config.version == UI_THEME_CONFIG_VERSION => Ok(config.into_theme()),
+        Ok(config) => Err(format!(
+            "{} uses unsupported version {}, expected {}",
+            path.display(),
+            config.version,
+            UI_THEME_CONFIG_VERSION
+        )),
+        Err(error) => Err(format!("{} could not be parsed: {error}", path.display())),
+    }
 }
 
 fn ui_theme_path_candidates() -> Vec<PathBuf> {
@@ -298,6 +358,131 @@ fn log_ui_theme_source(source: Res<UiThemeSource>) {
             diagnostics = ?source.diagnostics,
             "using built-in ui theme fallback"
         );
+    }
+}
+
+impl UiThemeHotReload {
+    fn new(source: &UiThemeSource) -> Self {
+        let watched_path = source
+            .loaded_path
+            .clone()
+            .unwrap_or_else(preferred_ui_theme_watch_path);
+        let last_modified = ui_theme_modified_time(&watched_path).ok();
+
+        Self {
+            watched_path,
+            last_modified,
+            poll_timer: Timer::from_seconds(
+                UI_THEME_HOT_RELOAD_INTERVAL_SECS,
+                TimerMode::Repeating,
+            ),
+            last_error: None,
+        }
+    }
+}
+
+fn preferred_ui_theme_watch_path() -> PathBuf {
+    if let Ok(path) = env::var(UI_THEME_ENV_VAR) {
+        return PathBuf::from(path);
+    }
+
+    ui_theme_path_candidates()
+        .into_iter()
+        .find(|path| path.exists())
+        .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(DEFAULT_THEME_ASSET_PATH))
+}
+
+fn ui_theme_modified_time(path: &Path) -> io::Result<SystemTime> {
+    fs::metadata(path).and_then(|metadata| metadata.modified())
+}
+
+fn poll_ui_theme_hot_reload(
+    time: Res<Time>,
+    mut theme: ResMut<UiTheme>,
+    mut source: ResMut<UiThemeSource>,
+    mut hot_reload: ResMut<UiThemeHotReload>,
+) {
+    if !hot_reload.poll_timer.tick(time.delta()).just_finished() {
+        return;
+    }
+
+    let modified = match ui_theme_modified_time(&hot_reload.watched_path) {
+        Ok(modified) => modified,
+        Err(error) => {
+            let message = format!(
+                "{} could not be stat'ed: {error}",
+                hot_reload.watched_path.display()
+            );
+            warn_ui_theme_reload_error(&mut hot_reload, message);
+            return;
+        }
+    };
+
+    if hot_reload.last_modified == Some(modified) && hot_reload.last_error.is_none() {
+        return;
+    }
+
+    match load_ui_theme_from_path(&hot_reload.watched_path) {
+        Ok(next_theme) => {
+            *theme = next_theme;
+            source.loaded_path = Some(hot_reload.watched_path.clone());
+            source.diagnostics.clear();
+            hot_reload.last_modified = Some(modified);
+            hot_reload.last_error = None;
+            info!(
+                path = %hot_reload.watched_path.display(),
+                "hot reloaded ui theme config"
+            );
+        }
+        Err(error) => {
+            warn_ui_theme_reload_error(&mut hot_reload, error);
+        }
+    }
+}
+
+fn warn_ui_theme_reload_error(hot_reload: &mut UiThemeHotReload, error: String) {
+    if hot_reload.last_error.as_deref() != Some(error.as_str()) {
+        warn!(
+            path = %hot_reload.watched_path.display(),
+            error = %error,
+            "failed to hot reload ui theme config; keeping current theme"
+        );
+    }
+
+    hot_reload.last_error = Some(error);
+}
+
+fn refresh_ui_theme_visuals(
+    theme: Res<UiTheme>,
+    mut clear_color: ResMut<ClearColor>,
+    mut backgrounds: Query<(&UiThemeBackgroundRole, &mut BackgroundColor)>,
+    mut borders: Query<(&UiThemeBorderRole, &mut BorderColor)>,
+    mut text_colors: Query<(&UiThemeTextColorRole, &mut TextColor)>,
+) {
+    if !theme.is_changed() {
+        return;
+    }
+
+    let mut has_screen_background = false;
+
+    for (role, mut background) in &mut backgrounds {
+        if matches!(*role, UiThemeBackgroundRole::Screen) {
+            has_screen_background = true;
+        }
+
+        *background = BackgroundColor(role.color(&theme));
+    }
+
+    if has_screen_background {
+        clear_color.0 = theme.colors.screen_background;
+    }
+
+    for (role, mut border) in &mut borders {
+        *border = BorderColor::all(role.color(&theme));
+    }
+
+    for (role, mut text_color) in &mut text_colors {
+        *text_color = TextColor(role.color(&theme));
     }
 }
 

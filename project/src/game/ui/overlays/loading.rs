@@ -3,7 +3,10 @@ use bevy::prelude::*;
 use crate::game::navigation::AppUiMode;
 use crate::game::ui::{
     core::{UiBlockingOverlay, UiLayer, UiLayerRoot, UiPanelId, UiPanelKind, UiPanelRoot},
-    style::UiTheme,
+    style::{
+        UiTheme,
+        theme::{UiThemeBackgroundRole, UiThemeBorderRole, UiThemeTextColorRole},
+    },
     widgets::screen_label,
 };
 
@@ -74,10 +77,13 @@ pub(in crate::game) fn spawn_loading(
             },
             BackgroundColor(theme.colors.panel_background),
             BorderColor::all(theme.colors.panel_border),
+            UiThemeBackgroundRole::Panel,
+            UiThemeBorderRole::Panel,
             children![screen_label(
+                theme,
                 loading.text.clone(),
                 theme.text.body,
-                theme.colors.text_primary,
+                UiThemeTextColorRole::Primary,
             )],
         )],
     ));

@@ -9,7 +9,10 @@ use crate::game::{
             modal::{UiConfirmModal, spawn_confirm_modal},
             router::UiRouteSystems,
         },
-        style::UiTheme,
+        style::{
+            UiTheme,
+            theme::{UiThemeBackgroundRole, UiThemeBorderRole, UiThemeTextColorRole},
+        },
         widgets::{screen_label, screen_title},
     },
 };
@@ -384,6 +387,8 @@ fn spawn_floating_panel(
             ZIndex(80),
             BackgroundColor(theme.colors.panel_background),
             BorderColor::all(theme.colors.panel_border),
+            UiThemeBackgroundRole::Panel,
+            UiThemeBorderRole::Panel,
         ))
         .with_children(|panel| {
             panel.spawn(screen_title(
@@ -392,16 +397,18 @@ fn spawn_floating_panel(
                 theme.text.subtitle,
             ));
             panel.spawn(screen_label(
+                theme,
                 floating.body.clone(),
                 theme.text.body,
-                theme.colors.text_primary,
+                UiThemeTextColorRole::Primary,
             ));
 
             if let Some(detail) = &floating.detail {
                 panel.spawn(screen_label(
+                    theme,
                     detail.clone(),
                     theme.text.caption,
-                    theme.colors.text_muted,
+                    UiThemeTextColorRole::Muted,
                 ));
             }
         });

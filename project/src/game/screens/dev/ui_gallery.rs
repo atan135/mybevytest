@@ -11,7 +11,10 @@ use crate::game::{
             UiConfirmModal, UiLoading, UiModalAction, UiModalActionSpec, UiModalActionStyle,
             UiModalId, UiRouteCommand, UiToast,
         },
-        style::UiTheme,
+        style::{
+            UiTheme,
+            theme::{UiThemeBackgroundRole, UiThemeBorderRole, UiThemeTextColorRole},
+        },
         widgets::{
             DisabledButton, FocusedButton, LoadingButton, SelectedButton,
             disabled_primary_action_button, disabled_secondary_action_button,
@@ -73,6 +76,7 @@ pub(super) fn setup_ui_gallery(
                 ..default()
             },
             BackgroundColor(theme.colors.screen_background),
+            UiThemeBackgroundRole::Screen,
         ))
         .with_children(|root| {
             root.spawn(gallery_header(theme)).with_children(|header| {
@@ -98,19 +102,22 @@ pub(super) fn setup_ui_gallery(
                                     theme.text.title,
                                 ));
                                 samples.spawn(screen_label(
+                                    theme,
                                     "Subtitle text",
                                     theme.text.subtitle,
-                                    theme.colors.text_muted,
+                                    UiThemeTextColorRole::Muted,
                                 ));
                                 samples.spawn(screen_label(
+                                    theme,
                                     "Body text",
                                     theme.text.body,
-                                    theme.colors.text_primary,
+                                    UiThemeTextColorRole::Primary,
                                 ));
                                 samples.spawn(screen_label(
+                                    theme,
                                     "Caption text",
                                     theme.text.caption,
-                                    theme.colors.text_muted,
+                                    UiThemeTextColorRole::Muted,
                                 ));
                             });
                     });
@@ -285,11 +292,18 @@ fn gallery_panel(theme: &UiTheme) -> impl Bundle {
         },
         BackgroundColor(theme.colors.panel_background),
         BorderColor::all(theme.colors.panel_border),
+        UiThemeBackgroundRole::Panel,
+        UiThemeBorderRole::Panel,
     )
 }
 
 fn section_label(theme: &UiTheme, text: impl Into<String>) -> impl Bundle {
-    screen_label(text, theme.text.section_label, theme.colors.text_muted)
+    screen_label(
+        theme,
+        text,
+        theme.text.section_label,
+        UiThemeTextColorRole::Muted,
+    )
 }
 
 fn primary_route_button_sample(theme: &UiTheme) -> impl Bundle {

@@ -4,7 +4,10 @@ use crate::game::{
     navigation::AppUiMode,
     ui::{
         core::{UiLayer, UiLayerRoot, UiPanelCommand, UiPanelId, UiPanelKind, UiPanelRoot},
-        style::UiTheme,
+        style::{
+            UiTheme,
+            theme::{UiThemeBackgroundRole, UiThemeBorderRole, UiThemeTextColorRole},
+        },
         widgets::{
             DisabledButton, LoadingButton, primary_action_button, screen_label, screen_title,
             secondary_action_button,
@@ -131,6 +134,8 @@ pub(in crate::game) fn spawn_confirm_modal(
                 },
                 BackgroundColor(theme.colors.panel_background),
                 BorderColor::all(theme.colors.panel_border),
+                UiThemeBackgroundRole::Panel,
+                UiThemeBorderRole::Panel,
             ))
             .with_children(|panel| {
                 panel.spawn(screen_title(
@@ -139,16 +144,18 @@ pub(in crate::game) fn spawn_confirm_modal(
                     theme.text.subtitle,
                 ));
                 panel.spawn(screen_label(
+                    theme,
                     modal.body.clone(),
                     theme.text.body,
-                    theme.colors.text_primary,
+                    UiThemeTextColorRole::Primary,
                 ));
 
                 if let Some(detail) = &modal.detail {
                     panel.spawn(screen_label(
+                        theme,
                         detail.clone(),
                         theme.text.caption,
-                        theme.colors.text_muted,
+                        UiThemeTextColorRole::Muted,
                     ));
                 }
 
