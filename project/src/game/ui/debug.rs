@@ -1,4 +1,9 @@
-use bevy::{picking::Pickable, prelude::*};
+use bevy::{
+    camera::{RenderTarget, visibility::RenderLayers},
+    picking::Pickable,
+    prelude::*,
+    window::{WindowRef, WindowResolution},
+};
 
 use crate::game::ui::{
     core::{
@@ -14,6 +19,9 @@ use crate::game::ui::{
     },
     widgets::{screen_label, screen_title},
 };
+
+const UI_DEBUG_TARGET_ENV: &str = "MYBEVY_UI_DEBUG_TARGET";
+const UI_DEBUG_RENDER_LAYER: usize = 31;
 
 pub(in crate::game) struct UiDebugPlugin;
 
@@ -33,18 +41,43 @@ impl Plugin for UiDebugPlugin {
     }
 }
 
-#[derive(Debug, Default, Resource)]
+#[derive(Debug, Resource)]
 struct UiDebugState {
     enabled: bool,
     root: Option<Entity>,
+    target: UiDebugDisplayTarget,
+    window: Option<Entity>,
+    camera: Option<Entity>,
     frozen: bool,
     panel_filter: UiDebugPanelFilter,
     highlight_panels: bool,
     frozen_body: Option<String>,
 }
 
+impl Default for UiDebugState {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            root: None,
+            target: initial_ui_debug_display_target(),
+            window: None,
+            camera: None,
+            frozen: false,
+            panel_filter: UiDebugPanelFilter::default(),
+            highlight_panels: false,
+            frozen_body: None,
+        }
+    }
+}
+
 #[derive(Component)]
 struct UiDebugRoot;
+
+#[derive(Component)]
+struct UiDebugWindow;
+
+#[derive(Component)]
+struct UiDebugCamera;
 
 #[derive(Component)]
 struct UiDebugText;
@@ -60,6 +93,29 @@ enum UiDebugPanelFilter {
     All,
     ActivePanelsOnly,
     BlockingPanelsOnly,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+enum UiDebugDisplayTarget {
+    #[default]
+    GameWindow,
+    DedicatedWindow,
+}
+
+impl UiDebugDisplayTarget {
+    fn label(self) -> &'static str {
+        match self {
+            Self::GameWindow => "game window",
+            Self::DedicatedWindow => "debug window",
+        }
+    }
+
+    fn next_supported(self) -> Self {
+        match self {
+            Self::GameWindow if supports_dedicated_debug_window() => Self::DedicatedWindow,
+            _ => Self::GameWindow,
+        }
+    }
 }
 
 impl UiDebugPanelFilter {
@@ -99,6 +155,14 @@ fn handle_ui_debug_keys(
     if key_codes.just_pressed(KeyCode::F6) {
         debug_state.highlight_panels = !debug_state.highlight_panels;
     }
+
+    if key_codes.just_pressed(KeyCode::F7) {
+        let next_target = debug_state.target.next_supported();
+        if debug_state.target != next_target {
+            debug_state.target = next_target;
+            debug_state.root = None;
+        }
+    }
 }
 
 fn sync_ui_debug_panel(
@@ -107,23 +171,77 @@ fn sync_ui_debug_panel(
     fonts: Res<UiFontAssets>,
     mut debug_state: ResMut<UiDebugState>,
     debug_roots: Query<Entity, With<UiDebugRoot>>,
+    debug_windows: Query<Entity, With<UiDebugWindow>>,
+    debug_cameras: Query<Entity, With<UiDebugCamera>>,
 ) {
+    debug_state.target = normalize_ui_debug_display_target(debug_state.target);
+
     if let Some(root) = debug_state.root
         && !debug_roots.contains(root)
     {
         debug_state.root = None;
     }
 
-    if !debug_state.enabled {
-        for root in &debug_roots {
-            commands.entity(root).try_despawn();
-        }
+    if let Some(window) = debug_state.window
+        && !debug_windows.contains(window)
+    {
+        cleanup_ui_debug_roots(&mut commands, &debug_roots);
+        cleanup_ui_debug_dedicated_target(&mut commands, &debug_windows, &debug_cameras);
+        debug_state.enabled = false;
         debug_state.root = None;
+        debug_state.window = None;
+        debug_state.camera = None;
+        return;
+    }
+
+    if let Some(camera) = debug_state.camera
+        && !debug_cameras.contains(camera)
+    {
+        debug_state.camera = None;
+        debug_state.root = None;
+    }
+
+    if !debug_state.enabled {
+        cleanup_ui_debug_roots(&mut commands, &debug_roots);
+        cleanup_ui_debug_dedicated_target(&mut commands, &debug_windows, &debug_cameras);
+        debug_state.root = None;
+        debug_state.window = None;
+        debug_state.camera = None;
         return;
     }
 
     if debug_state.root.is_none() {
-        debug_state.root = Some(spawn_ui_debug_panel(&mut commands, &theme, &fonts));
+        cleanup_ui_debug_roots(&mut commands, &debug_roots);
+    }
+
+    let target_camera = match debug_state.target {
+        UiDebugDisplayTarget::GameWindow => {
+            cleanup_ui_debug_dedicated_target(&mut commands, &debug_windows, &debug_cameras);
+            debug_state.window = None;
+            debug_state.camera = None;
+            None
+        }
+        UiDebugDisplayTarget::DedicatedWindow => {
+            if debug_state.window.is_none() || debug_state.camera.is_none() {
+                cleanup_ui_debug_dedicated_target(&mut commands, &debug_windows, &debug_cameras);
+                let (window, camera) = spawn_ui_debug_window(&mut commands);
+                debug_state.window = Some(window);
+                debug_state.camera = Some(camera);
+                debug_state.root = None;
+            }
+
+            debug_state.camera
+        }
+    };
+
+    if debug_state.root.is_none() {
+        debug_state.root = Some(spawn_ui_debug_panel(
+            &mut commands,
+            &theme,
+            &fonts,
+            debug_state.target,
+            target_camera,
+        ));
     }
 }
 
@@ -168,12 +286,13 @@ fn refresh_ui_debug_text(
 fn ui_debug_header_lines(debug_state: &UiDebugState) -> Vec<String> {
     vec![
         format!(
-            "debug: freeze={} filter={} highlight={}",
+            "debug: target={} freeze={} filter={} highlight={}",
+            debug_state.target.label(),
             on_off_label(debug_state.frozen),
             debug_state.panel_filter.label(),
             on_off_label(debug_state.highlight_panels),
         ),
-        "keys: F3 toggle panel | F4 freeze | F5 filter | F6 highlight".to_string(),
+        "keys: F3 toggle panel | F4 freeze | F5 filter | F6 highlight | F7 target".to_string(),
         String::new(),
     ]
 }
@@ -307,58 +426,174 @@ fn sync_ui_debug_panel_highlights(
     }
 }
 
-fn spawn_ui_debug_panel(commands: &mut Commands, theme: &UiTheme, fonts: &UiFontAssets) -> Entity {
-    commands
-        .spawn((
-            UiDebugRoot,
-            UiLayerRoot {
-                layer: UiLayer::Debug,
-            },
-            UiThemeRootNodeRole::Debug,
-            UiThemePanelNodeRole::Debug,
+fn spawn_ui_debug_panel(
+    commands: &mut Commands,
+    theme: &UiTheme,
+    fonts: &UiFontAssets,
+    target: UiDebugDisplayTarget,
+    target_camera: Option<Entity>,
+) -> Entity {
+    let node = ui_debug_panel_node(theme, target);
+
+    let mut root = commands.spawn((
+        UiDebugRoot,
+        UiLayerRoot {
+            layer: UiLayer::Debug,
+        },
+        UiThemeRootNodeRole::Debug,
+        UiThemePanelNodeRole::Debug,
+        node,
+        ZIndex(250),
+        BackgroundColor(theme.colors.panel_background),
+        BorderColor::all(theme.colors.panel_border),
+        UiThemeBackgroundRole::Panel,
+        UiThemeBorderRole::Panel,
+        Pickable::IGNORE,
+    ));
+
+    if let Some(target_camera) = target_camera {
+        root.insert(UiTargetCamera(target_camera));
+    }
+
+    root.with_children(|root| {
+        root.spawn((
             Node {
-                position_type: PositionType::Absolute,
-                left: px(theme.layout.overlay_padding),
-                top: px(theme.layout.overlay_padding),
-                width: px(430),
-                max_width: percent(94),
-                flex_direction: FlexDirection::Column,
-                row_gap: px(theme.layout.row_gap),
-                padding: UiRect::all(px(14)),
-                border: UiRect::all(px(theme.panel.border)),
-                border_radius: BorderRadius::all(px(theme.panel.radius)),
+                width: percent(100),
                 ..default()
             },
-            ZIndex(250),
-            BackgroundColor(theme.colors.panel_background),
-            BorderColor::all(theme.colors.panel_border),
-            UiThemeBackgroundRole::Panel,
-            UiThemeBorderRole::Panel,
+            screen_title(
+                theme,
+                fonts,
+                "UI Input Debug",
+                UiThemeTextStyleRole::Caption,
+            ),
             Pickable::IGNORE,
+        ));
+        root.spawn((
+            Node {
+                width: percent(100),
+                ..default()
+            },
+            screen_label(
+                theme,
+                fonts,
+                "",
+                UiThemeTextStyleRole::Caption,
+                UiThemeTextColorRole::Primary,
+            ),
+            UiDebugText,
+            Pickable::IGNORE,
+        ));
+    })
+    .id()
+}
+
+fn ui_debug_panel_node(theme: &UiTheme, target: UiDebugDisplayTarget) -> Node {
+    let overlay_padding = px(theme.layout.overlay_padding);
+
+    let mut node = Node {
+        position_type: PositionType::Absolute,
+        left: overlay_padding,
+        top: overlay_padding,
+        flex_direction: FlexDirection::Column,
+        row_gap: px(theme.layout.row_gap),
+        padding: UiRect::all(px(14)),
+        border: UiRect::all(px(theme.panel.border)),
+        border_radius: BorderRadius::all(px(theme.panel.radius)),
+        ..default()
+    };
+
+    match target {
+        UiDebugDisplayTarget::GameWindow => {
+            node.width = px(430);
+            node.max_width = percent(94);
+        }
+        UiDebugDisplayTarget::DedicatedWindow => {
+            node.right = overlay_padding;
+            node.bottom = overlay_padding;
+            node.width = auto();
+            node.max_width = percent(100);
+        }
+    }
+
+    node
+}
+
+fn spawn_ui_debug_window(commands: &mut Commands) -> (Entity, Entity) {
+    let window = commands
+        .spawn((
+            UiDebugWindow,
+            Window {
+                title: "MyBevy UI Debug".to_string(),
+                resolution: WindowResolution::new(560, 720),
+                ..default()
+            },
         ))
-        .with_children(|root| {
-            root.spawn((
-                screen_title(
-                    theme,
-                    fonts,
-                    "UI Input Debug",
-                    UiThemeTextStyleRole::Caption,
-                ),
-                Pickable::IGNORE,
-            ));
-            root.spawn((
-                screen_label(
-                    theme,
-                    fonts,
-                    "",
-                    UiThemeTextStyleRole::Caption,
-                    UiThemeTextColorRole::Primary,
-                ),
-                UiDebugText,
-                Pickable::IGNORE,
-            ));
-        })
-        .id()
+        .id();
+
+    let camera = commands
+        .spawn((
+            UiDebugCamera,
+            Camera2d,
+            RenderLayers::layer(UI_DEBUG_RENDER_LAYER),
+            RenderTarget::Window(WindowRef::Entity(window)),
+        ))
+        .id();
+
+    (window, camera)
+}
+
+fn cleanup_ui_debug_roots(commands: &mut Commands, debug_roots: &Query<Entity, With<UiDebugRoot>>) {
+    for root in debug_roots {
+        commands.entity(root).try_despawn();
+    }
+}
+
+fn cleanup_ui_debug_dedicated_target(
+    commands: &mut Commands,
+    debug_windows: &Query<Entity, With<UiDebugWindow>>,
+    debug_cameras: &Query<Entity, With<UiDebugCamera>>,
+) {
+    for camera in debug_cameras {
+        commands.entity(camera).try_despawn();
+    }
+
+    for window in debug_windows {
+        commands.entity(window).try_despawn();
+    }
+}
+
+fn initial_ui_debug_display_target() -> UiDebugDisplayTarget {
+    std::env::var(UI_DEBUG_TARGET_ENV)
+        .ok()
+        .and_then(|value| parse_ui_debug_display_target(&value))
+        .map(normalize_ui_debug_display_target)
+        .unwrap_or_default()
+}
+
+fn parse_ui_debug_display_target(value: &str) -> Option<UiDebugDisplayTarget> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "game" | "main" | "main-window" | "game-window" | "inline" => {
+            Some(UiDebugDisplayTarget::GameWindow)
+        }
+        "window" | "debug-window" | "dedicated" | "popout" | "external" => {
+            Some(UiDebugDisplayTarget::DedicatedWindow)
+        }
+        _ => None,
+    }
+}
+
+fn normalize_ui_debug_display_target(target: UiDebugDisplayTarget) -> UiDebugDisplayTarget {
+    match target {
+        UiDebugDisplayTarget::DedicatedWindow if !supports_dedicated_debug_window() => {
+            UiDebugDisplayTarget::GameWindow
+        }
+        _ => target,
+    }
+}
+
+fn supports_dedicated_debug_window() -> bool {
+    !cfg!(target_os = "android")
 }
 
 fn visibility_label(visibility: Option<&Visibility>) -> &'static str {
@@ -485,5 +720,55 @@ mod tests {
         assert_eq!(border.top, border.right);
         assert_eq!(border.right, border.bottom);
         assert_eq!(border.bottom, border.left);
+    }
+
+    #[test]
+    fn debug_display_target_parses_known_values() {
+        assert_eq!(
+            parse_ui_debug_display_target("game"),
+            Some(UiDebugDisplayTarget::GameWindow)
+        );
+        assert_eq!(
+            parse_ui_debug_display_target("main-window"),
+            Some(UiDebugDisplayTarget::GameWindow)
+        );
+        assert_eq!(
+            parse_ui_debug_display_target("window"),
+            Some(UiDebugDisplayTarget::DedicatedWindow)
+        );
+        assert_eq!(
+            parse_ui_debug_display_target("popout"),
+            Some(UiDebugDisplayTarget::DedicatedWindow)
+        );
+        assert_eq!(parse_ui_debug_display_target("unknown"), None);
+    }
+
+    #[test]
+    fn debug_display_target_cycles_to_supported_mode() {
+        let next = UiDebugDisplayTarget::GameWindow.next_supported();
+
+        if supports_dedicated_debug_window() {
+            assert_eq!(next, UiDebugDisplayTarget::DedicatedWindow);
+        } else {
+            assert_eq!(next, UiDebugDisplayTarget::GameWindow);
+        }
+
+        assert_eq!(
+            UiDebugDisplayTarget::DedicatedWindow.next_supported(),
+            UiDebugDisplayTarget::GameWindow
+        );
+    }
+
+    #[test]
+    fn debug_panel_node_uses_wide_layout_for_dedicated_window() {
+        let theme = UiTheme::default();
+        let game_node = ui_debug_panel_node(&theme, UiDebugDisplayTarget::GameWindow);
+        let window_node = ui_debug_panel_node(&theme, UiDebugDisplayTarget::DedicatedWindow);
+
+        assert_eq!(game_node.width, px(430));
+        assert_eq!(game_node.right, Val::Auto);
+        assert_eq!(window_node.width, Val::Auto);
+        assert_eq!(window_node.right, px(theme.layout.overlay_padding));
+        assert_eq!(window_node.bottom, px(theme.layout.overlay_padding));
     }
 }

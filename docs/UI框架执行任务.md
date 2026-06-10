@@ -734,6 +734,16 @@ pub(in crate::game) struct UiInputState {
 - 可见 panel 列表只基于 `Visibility` / `InheritedVisibility` 过滤，不做屏幕裁剪或实际命中区域判断。
 - 调试面板自身不做全量重建；已创建节点的背景、边框、文本色、字号、overlay 位置、padding 和圆角走现有主题 role 刷新。
 
+### 输入路由调试面板独立窗口
+
+- F3 调试面板支持显示目标切换：默认显示在游戏主窗口，桌面调试时可按 `F7` 切到独立 `MyBevy UI Debug` 窗口，再按一次回到主窗口。
+- 启动时可通过环境变量 `MYBEVY_UI_DEBUG_TARGET` 指定默认显示目标：
+  - `game` / `main-window` / `inline`：显示在游戏主窗口。
+  - `window` / `debug-window` / `popout`：显示在独立调试窗口。
+- Android 等移动端强制回退到游戏主窗口，避免多窗口能力差异影响真机运行。
+- 独立窗口模式使用专用 `Window + Camera2d + UiTargetCamera`，调试面板会自适应填充窗口内容区宽度；调试 UI 仍不纳入 Panel Manager，且继续使用 `Pickable::IGNORE`，不会阻塞主窗口下层 pointer 输入。
+- 手动关闭独立调试窗口时，F3 调试状态会自动关闭；再次按 `F3` 会按当前显示目标重新创建。
+
 ### 通用文本输入框第一版
 
 - 已新增 widgets 层通用文本输入框 `text_input(...)`，根节点使用 `Button + FocusableButton + UiTextInput`，因此可以通过鼠标点击进入焦点，也可以通过现有 `Tab` 焦点系统访问。
