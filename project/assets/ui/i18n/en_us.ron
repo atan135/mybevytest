@@ -94,5 +94,12 @@
         "ui_gallery.floating.title": "Floating Panel",
         "ui_gallery.floating.body": "This panel does not cover the whole page.",
         "ui_gallery.floating.detail": "Use Close Top or Esc to close it.",
+        "ui_gallery.stress.section": "Stress Sample",
+        "ui_gallery.stress.description": "Static list for observing node and text counts in F3.",
+        "ui_gallery.stress.item": "Item",
+        "ui_gallery.stress.state.ready": "Ready",
+        "ui_gallery.stress.state.waiting": "Waiting",
+        "ui_gallery.stress.state.done": "Done",
+        "ui_gallery.stress.action": "Inspect",
     },
 )

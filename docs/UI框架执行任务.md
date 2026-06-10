@@ -757,6 +757,11 @@ pub(in crate::game) struct UiInputState {
 - P3-03-03 已把 `UiStats` 接入 F3 调试面板正文：
   - 显示 `ui stats` 区域，包含 UI `Node` 总数、可见 `Node` 数、`Text` 节点数，以及 Panel 总数和 `page / hud / floating / modal / blocking` 分类计数。
   - 统计信息属于 F3 body，按 `F4` 冻结时会随 route history 和 panel 列表一起冻结；header 仍继续显示当前 `freeze / filter / highlight / target` 状态。
+- P3-03-04 已在 `UiGallery` 增加静态压力样例：
+  - `Stress Sample` 区域位于 UiGallery 滚动正文末尾，包含 96 个小条目。
+  - 每个条目包含编号文本、状态文本和一个 `Inspect` 小按钮，用于人工观察大量 `Node` / `Text` / `Button` 对 F3 `ui stats` 的影响。
+  - 样例不引入定时器或每帧动态刷新，避免把刷新压力和静态节点压力混在一起。
+  - 已补充中英文 i18n 资源和内置中文 fallback。
 - 当前保留的成本：`UiStats` 每帧全量扫描 UI 节点，F3 打开时调试文本每帧构建。这两处是诊断能力的有意成本，后续可按需增加采样间隔、dirty marker 或只在独立调试窗口打开时提高采样频率。
 
 ### 通用文本输入框第一版

@@ -27,14 +27,17 @@ use crate::game::{
             disabled_checkbox_key, disabled_icon_button_key, disabled_primary_action_button_key,
             disabled_secondary_action_button_key, disabled_segment_option_key, disabled_slider_key,
             disabled_stepper_key, disabled_toggle_key, icon_button_key, loading_icon_button_key,
-            loading_primary_action_button_key, primary_action_button_key, screen_label_key,
-            screen_title_key, secondary_action_button_key, secondary_route_button_key,
-            segment_option_key, segmented_control, selected_segment_option_key, slider_key,
-            stepper_key, text_input, text_input_form_message, toggle_key, toggle_on_key, ui_column,
-            ui_grid, ui_scroll_column,
+            loading_primary_action_button_key, primary_action_button_key, screen_label,
+            screen_label_key, screen_title_key, secondary_action_button_key,
+            secondary_route_button_key, segment_option_key, segmented_control,
+            selected_segment_option_key, slider_key, stepper_key, text_input,
+            text_input_form_message, toggle_key, toggle_on_key, ui_column, ui_grid,
+            ui_scroll_column,
         },
     },
 };
+
+const GALLERY_STRESS_ITEM_COUNT: usize = 96;
 
 #[derive(Clone, Copy, Component)]
 pub(super) enum GalleryActionButton {
@@ -691,6 +694,33 @@ pub(super) fn setup_ui_gallery(
                                 ));
                             });
                     });
+
+                body.spawn(gallery_panel(theme))
+                    .with_children(|stress_panel| {
+                        stress_panel.spawn(section_label_key(
+                            theme,
+                            fonts,
+                            i18n,
+                            "ui_gallery.stress.section",
+                            "Stress Sample",
+                        ));
+                        stress_panel.spawn(screen_label_key(
+                            theme,
+                            fonts,
+                            i18n,
+                            "ui_gallery.stress.description",
+                            "Static list for observing node and text counts in F3.",
+                            UiThemeTextStyleRole::Body,
+                            UiThemeTextColorRole::Muted,
+                        ));
+                        stress_panel
+                            .spawn(gallery_stress_grid(theme))
+                            .with_children(|items| {
+                                for index in 0..GALLERY_STRESS_ITEM_COUNT {
+                                    spawn_gallery_stress_item(items, theme, fonts, i18n, index);
+                                }
+                            });
+                    });
             });
         });
 }
@@ -868,6 +898,86 @@ fn gallery_panel(theme: &UiTheme) -> impl Bundle {
         UiThemeBackgroundRole::Panel,
         UiThemeBorderRole::Panel,
     )
+}
+
+fn gallery_stress_grid(theme: &UiTheme) -> impl Bundle {
+    Node {
+        width: percent(100),
+        display: Display::Grid,
+        grid_template_columns: RepeatedGridTrack::flex(3, 1.0),
+        grid_auto_rows: vec![GridTrack::auto()],
+        column_gap: px(theme.layout.row_column_gap),
+        row_gap: px(theme.layout.row_gap),
+        align_items: AlignItems::Stretch,
+        justify_items: JustifyItems::Stretch,
+        ..default()
+    }
+}
+
+fn gallery_stress_item(theme: &UiTheme, index: usize) -> impl Bundle {
+    (
+        Node {
+            width: percent(100),
+            min_height: px(82),
+            flex_direction: FlexDirection::Column,
+            justify_content: JustifyContent::SpaceBetween,
+            row_gap: px(theme.layout.row_gap * 0.5),
+            padding: UiRect::all(px(theme.layout.row_gap)),
+            border: UiRect::all(px(theme.panel.border)),
+            border_radius: BorderRadius::all(px(theme.button.radius)),
+            ..default()
+        },
+        BackgroundColor(theme.colors.secondary_button.idle),
+        BorderColor::all(theme.colors.panel_border),
+        Name::new(format!("Gallery stress item {}", index + 1)),
+    )
+}
+
+fn spawn_gallery_stress_item(
+    items: &mut ChildSpawnerCommands,
+    theme: &UiTheme,
+    fonts: &UiFontAssets,
+    i18n: &UiI18n,
+    index: usize,
+) {
+    let title = format!(
+        "{} {:02}",
+        i18n.tr("ui_gallery.stress.item", "Item"),
+        index + 1
+    );
+    let state = if index % 3 == 0 {
+        i18n.tr("ui_gallery.stress.state.ready", "Ready")
+    } else if index % 3 == 1 {
+        i18n.tr("ui_gallery.stress.state.waiting", "Waiting")
+    } else {
+        i18n.tr("ui_gallery.stress.state.done", "Done")
+    };
+
+    items
+        .spawn(gallery_stress_item(theme, index))
+        .with_children(|item| {
+            item.spawn(screen_label(
+                theme,
+                fonts,
+                title,
+                UiThemeTextStyleRole::Caption,
+                UiThemeTextColorRole::Primary,
+            ));
+            item.spawn(screen_label(
+                theme,
+                fonts,
+                state,
+                UiThemeTextStyleRole::Caption,
+                UiThemeTextColorRole::Muted,
+            ));
+            item.spawn(secondary_action_button_key(
+                theme,
+                fonts,
+                i18n,
+                "ui_gallery.stress.action",
+                "Inspect",
+            ));
+        });
 }
 
 fn section_label_key(

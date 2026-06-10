@@ -492,6 +492,16 @@ fn built_in_zh_cn_texts() -> HashMap<String, String> {
             "ui_gallery.floating.detail",
             "使用关闭顶层按钮或 Esc 关闭它。",
         ),
+        ("ui_gallery.stress.section", "压力样例"),
+        (
+            "ui_gallery.stress.description",
+            "静态列表，用于在 F3 中观察节点和文本数量。",
+        ),
+        ("ui_gallery.stress.item", "条目"),
+        ("ui_gallery.stress.state.ready", "就绪"),
+        ("ui_gallery.stress.state.waiting", "等待中"),
+        ("ui_gallery.stress.state.done", "完成"),
+        ("ui_gallery.stress.action", "检查"),
     ]
     .into_iter()
     .map(|(key, value)| (key.to_string(), value.to_string()))
