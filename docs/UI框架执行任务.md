@@ -816,6 +816,12 @@ pub(in crate::game) struct UiInputState {
   - 已补充中英文 i18n 资源和内置中文 fallback。
 - 当前 disabled 绑定第一版只支持 `Button` 的 `DisabledButton` marker，暂不处理 `DisabledTextInput`、slider、stepper 或自定义禁用 marker。
 
+- P3-02-04 已接入真实页面：
+  - Login 页面副标题复用 `auth.login.subtitle` 作为绑定路径，进入页面时由 `UiBindingValues` 写入当前 i18n 文案，文本节点挂载 `UiBoundText` 后由绑定系统刷新。
+  - Login 状态下新增轻量同步系统：当 `UiI18n` 热更新时，重新写入同一路径绑定值，让真实页面文本通过绑定链路响应文案变化。
+  - 本阶段只接一个低风险文本点，不批量改造页面，也不改变登录按钮路由行为。
+  - 后续可选择 Lobby 状态说明、联网状态或真实表单状态作为更有业务意义的绑定来源。
+
 ### 通用文本输入框第一版
 
 - 已新增 widgets 层通用文本输入框 `text_input(...)`，根节点使用 `Button + FocusableButton + UiTextInput`，因此可以通过鼠标点击进入焦点，也可以通过现有 `Tab` 焦点系统访问。
