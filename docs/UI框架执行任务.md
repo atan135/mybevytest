@@ -1035,3 +1035,29 @@ pub(in crate::game) struct UiInputState {
 
 - 字体子集不覆盖扩展汉字区、emoji、日文假名、韩文、繁体专用扩展字形等；后续新增语言或特殊符号时需要重新生成或替换字体子集。
 - 当前只有 Regular 字重，`TextFont.weight` 不单独加载 Bold/Medium 字体。
+
+### P3-05-01 Android 构建环境与 Debug APK 构建验证
+
+- Rust Android 动态库构建已通过：
+  - 执行目录：`project/`
+  - 命令：`cargo ndk -t arm64-v8a -P 26 -o ..\android\app\src\main\jniLibs build --release`
+  - 结果：最终构建成功，`cargo-ndk` 输出 `Finished release profile` 并复制库到 Android 壳工程。
+  - 产物：`android/app/src/main/jniLibs/arm64-v8a/libproject.so`
+  - 产物大小：`127366736` bytes
+  - 产物时间：`2026-06-10 19:59:42`
+- Android Debug APK 构建已通过：
+  - 执行目录：`android/`
+  - 命令：`$env:JAVA_HOME='C:\Program Files\Java\jdk-21'; .\gradlew.bat assembleDebug`
+  - 结果：`BUILD SUCCESSFUL in 1m 15s`，共 `36 actionable tasks: 12 executed, 24 up-to-date`。
+  - Gradle wrapper 实际使用：`C:\Program Files\Java\jdk-21/bin/java.exe`
+  - APK 产物：`android/app/build/outputs/apk/debug/app-debug.apk`
+  - APK 大小：`174828837` bytes
+  - APK 时间：`2026-06-10 20:02:37`
+- 真机状态：
+  - 已尝试执行 `adb devices`，但当前终端 `adb` 不在 PATH 中，错误为 `The term 'adb' is not recognized as a name of a cmdlet, function, script file, or executable program.`
+  - 本次未执行安装、启动或真机人工验收。
+
+当前限制：
+
+- 已完成构建链路验证，但未验证 APK 在真实 Android 设备上的安装、启动、渲染、触控输入和中文字形显示。
+- 后续真机验收前需要安装 Android platform-tools 或把 `adb.exe` 所在目录加入 PATH。
