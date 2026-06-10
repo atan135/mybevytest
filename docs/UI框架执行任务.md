@@ -764,6 +764,32 @@ pub(in crate::game) struct UiInputState {
   - 已补充中英文 i18n 资源和内置中文 fallback。
 - 当前保留的成本：`UiStats` 每帧全量扫描 UI 节点，F3 打开时调试文本每帧构建。这两处是诊断能力的有意成本，后续可按需增加采样间隔、dirty marker 或只在独立调试窗口打开时提高采样频率。
 
+#### P3-03 收口状态
+
+- 完成状态：
+  - 已具备 `UiStats` 统计资源和 `UiStatsPlugin`，可持续采集 UI 节点、文本节点和 Panel 分类计数。
+  - F3 调试面板已显示 `ui stats` 区域，支持在主窗口和独立调试窗口中观察统计数据。
+  - `UiGallery` 已提供 96 项静态压力样例，用于观察大量静态节点、文本和按钮对统计数据的影响。
+  - 高频系统巡检已完成，主题 / i18n / scroll 保持现有早退或事件驱动策略，controls 和 debug 已补充差异写入、`Changed<T>` 过滤或早退保护。
+- 自动验证：
+  - P3-03-01 至 P3-03-04 每步均已通过 `cargo fmt --check`、`cargo test` 和 `cargo check`。
+  - P3-03-05 仅整理文档，不改 Rust 代码；文档提交前至少运行 `git diff --check`。
+- 手动验收建议：
+  - 启动 `UiGallery`，按 `F3` 打开调试面板，确认正文中存在 `ui stats` 区域。
+  - 滚动到 `Stress Sample` 区域，观察 `nodes`、`text` 和 panel 统计保持合理变化，不出现异常跳动。
+  - 按 `F7` 切换到独立调试窗口，确认 `ui stats` 仍持续显示且窗口宽度自适应。
+  - 操作 slider、stepper 和 text input，确认控件交互正常，统计数据不会因为无关刷新产生持续异常增长。
+- 当前保留成本：
+  - `UiStats` 仍在每帧全量扫描 UI `Node`、`Text` 和 `UiPanelRoot`，适合作为第一版诊断数据源，但不是最终低成本采集方案。
+  - F3 打开时仍会每帧构建调试文本，以保证输入路由、冻结和过滤状态可观察。
+  - `Stress Sample` 当前只覆盖静态节点压力，不覆盖高频动态文本刷新、列表虚拟化或批量重建压力。
+- 后续优化建议：
+  - 给 `UiStats` 增加采样间隔、dirty marker 或按调试开关启停采集，降低常驻成本。
+  - 增加文本刷新计数、panel 打开 / 关闭次数、panel 栈变化次数等更贴近业务页面的指标。
+  - 接入系统耗时或阶段耗时记录，观察 theme、i18n、input、controls、debug 等系统在真实页面中的开销。
+  - 为 panel 切换、长列表滚动和大量文本更新补充专门压力样例，区分静态节点成本和动态刷新成本。
+  - 在 Android 真机记录实际帧率、触控响应和 F3 stats 表现，作为 P3-05 平台验证输入。
+
 ### 通用文本输入框第一版
 
 - 已新增 widgets 层通用文本输入框 `text_input(...)`，根节点使用 `Button + FocusableButton + UiTextInput`，因此可以通过鼠标点击进入焦点，也可以通过现有 `Tab` 焦点系统访问。
