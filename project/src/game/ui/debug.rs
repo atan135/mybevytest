@@ -40,6 +40,7 @@ struct UiDebugState {
     frozen: bool,
     panel_filter: UiDebugPanelFilter,
     highlight_panels: bool,
+    frozen_body: Option<String>,
 }
 
 #[derive(Component)]
@@ -127,7 +128,7 @@ fn sync_ui_debug_panel(
 }
 
 fn refresh_ui_debug_text(
-    debug_state: Res<UiDebugState>,
+    mut debug_state: ResMut<UiDebugState>,
     input_state: Res<UiInputState>,
     focus_state: Res<UiFocusState>,
     panels: Query<(
@@ -142,11 +143,30 @@ fn refresh_ui_debug_text(
         return;
     };
 
-    if debug_state.frozen {
-        return;
-    }
+    let header = ui_debug_header_lines(&debug_state);
+    let body = if debug_state.frozen {
+        debug_state.frozen_body.clone().unwrap_or_else(|| {
+            build_ui_debug_body(&debug_state, &input_state, &focus_state, &panels)
+        })
+    } else {
+        let body = build_ui_debug_body(&debug_state, &input_state, &focus_state, &panels);
+        debug_state.frozen_body = Some(body.clone());
+        body
+    };
 
-    let mut lines = vec![
+    let display = if body.is_empty() {
+        header.join("\n")
+    } else {
+        format!("{}\n{}", header.join("\n"), body)
+    };
+
+    if text.0 != display {
+        text.0 = display;
+    }
+}
+
+fn ui_debug_header_lines(debug_state: &UiDebugState) -> Vec<String> {
+    vec![
         format!(
             "debug: freeze={} filter={} highlight={}",
             on_off_label(debug_state.frozen),
@@ -155,6 +175,21 @@ fn refresh_ui_debug_text(
         ),
         "keys: F3 toggle panel | F4 freeze | F5 filter | F6 highlight".to_string(),
         String::new(),
+    ]
+}
+
+fn build_ui_debug_body(
+    debug_state: &UiDebugState,
+    input_state: &UiInputState,
+    focus_state: &UiFocusState,
+    panels: &Query<(
+        Entity,
+        &UiPanelRoot,
+        Option<&Visibility>,
+        Option<&InheritedVisibility>,
+    )>,
+) -> String {
+    let mut lines = vec![
         format!("pointer_blocked: {}", input_state.pointer_blocked),
         format!("block_reason: {}", input_state.pointer_block_reason),
         format!("route_summary: {}", input_state.route_summary),
@@ -209,7 +244,7 @@ fn refresh_ui_debug_text(
         }
     }
 
-    text.0 = lines.join("\n");
+    lines.join("\n")
 }
 
 fn sync_ui_debug_panel_highlights(
