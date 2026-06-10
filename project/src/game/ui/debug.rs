@@ -96,11 +96,23 @@ fn refresh_ui_debug_text(
 
     let mut lines = vec![
         format!("pointer_blocked: {}", input_state.pointer_blocked),
+        format!("block_reason: {}", input_state.pointer_block_reason),
+        format!("route_summary: {}", input_state.route_summary),
         format!("focused_panel: {:?}", input_state.focused_panel),
         format!("top_blocking_panel: {:?}", input_state.top_blocking_panel),
         format!("focused_entity: {:?}", focus_state.focused_entity),
-        "visible panels:".to_string(),
+        "route history:".to_string(),
     ];
+
+    if input_state.route_history.is_empty() {
+        lines.push("  none".to_string());
+    } else {
+        for entry in &input_state.route_history {
+            lines.push(format!("  #{:03} {}", entry.id, entry.summary));
+        }
+    }
+
+    lines.extend(["visible panels:".to_string()]);
 
     let mut visible_panels = panels
         .iter()
