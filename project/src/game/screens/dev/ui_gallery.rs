@@ -6,7 +6,7 @@ use crate::game::{
         core::{
             UiFloatingPanel, UiLayer, UiLayerRoot, UiPanelCommand, UiPanelId, UiPanelKind,
             UiPanelRequest, UiPanelRoot,
-            binding::{UiBindingValues, UiBoundText},
+            binding::{UiBindingValues, UiBoundDisabled, UiBoundText, UiBoundVisibility},
         },
         i18n::{UiI18n, UiI18nText},
         overlays::{
@@ -40,6 +40,8 @@ use crate::game::{
 
 const GALLERY_STRESS_ITEM_COUNT: usize = 96;
 const GALLERY_BINDING_STATUS_PATH: &str = "gallery.binding.status";
+const GALLERY_BINDING_NOTICE_VISIBLE_PATH: &str = "gallery.binding.notice_visible";
+const GALLERY_BINDING_BUTTON_DISABLED_PATH: &str = "gallery.binding.button_disabled";
 
 #[derive(Clone, Copy, Component)]
 pub(super) enum GalleryActionButton {
@@ -58,9 +60,11 @@ pub(super) struct GalleryLoadingPreview {
     timer: Timer,
 }
 
-#[derive(Default, Resource)]
+#[derive(Resource)]
 pub(super) struct GalleryBindingPreview {
     update_count: usize,
+    notice_visible: bool,
+    button_disabled: bool,
 }
 
 #[derive(Resource)]
@@ -94,6 +98,16 @@ impl GalleryLoadingPreview {
     }
 }
 
+impl Default for GalleryBindingPreview {
+    fn default() -> Self {
+        Self {
+            update_count: 0,
+            notice_visible: true,
+            button_disabled: false,
+        }
+    }
+}
+
 pub(super) fn setup_ui_gallery(
     mut commands: Commands,
     theme: Res<UiTheme>,
@@ -114,6 +128,8 @@ pub(super) fn setup_ui_gallery(
             "Waiting for binding update.",
         ),
     );
+    binding_values.set_bool(GALLERY_BINDING_NOTICE_VISIBLE_PATH, true);
+    binding_values.set_bool(GALLERY_BINDING_BUTTON_DISABLED_PATH, false);
 
     commands
         .spawn((
@@ -641,7 +657,7 @@ pub(super) fn setup_ui_gallery(
                             fonts,
                             i18n,
                             "ui_gallery.binding.description",
-                            "The text below is driven by UiBindingValues.",
+                            "The controls below are driven by UiBindingValues.",
                             UiThemeTextStyleRole::Body,
                             UiThemeTextColorRole::Muted,
                         ));
@@ -667,6 +683,31 @@ pub(super) fn setup_ui_gallery(
                                         ),
                                     )
                                     .expect("gallery binding path should be valid"),
+                                ));
+                                sample.spawn((
+                                    screen_label_key(
+                                        theme,
+                                        fonts,
+                                        i18n,
+                                        "ui_gallery.binding.notice",
+                                        "This prompt is controlled by a bool visibility binding.",
+                                        UiThemeTextStyleRole::Body,
+                                        UiThemeTextColorRole::Muted,
+                                    ),
+                                    Visibility::Visible,
+                                    UiBoundVisibility::new(GALLERY_BINDING_NOTICE_VISIBLE_PATH)
+                                        .expect("gallery binding path should be valid"),
+                                ));
+                                sample.spawn((
+                                    secondary_action_button_key(
+                                        theme,
+                                        fonts,
+                                        i18n,
+                                        "ui_gallery.binding.bound_button",
+                                        "Bound Button",
+                                    ),
+                                    UiBoundDisabled::new(GALLERY_BINDING_BUTTON_DISABLED_PATH)
+                                        .expect("gallery binding path should be valid"),
                                 ));
                                 sample.spawn((
                                     secondary_action_button_key(
@@ -863,6 +904,8 @@ pub(super) fn handle_ui_gallery_buttons(
             }
             GalleryActionButton::UpdateBinding => {
                 binding_preview.update_count += 1;
+                binding_preview.notice_visible = !binding_preview.notice_visible;
+                binding_preview.button_disabled = !binding_preview.button_disabled;
                 binding_values.set_text(
                     GALLERY_BINDING_STATUS_PATH,
                     format!(
@@ -870,6 +913,14 @@ pub(super) fn handle_ui_gallery_buttons(
                         i18n.tr("ui_gallery.binding.status.updated", "Bound text updated"),
                         binding_preview.update_count
                     ),
+                );
+                binding_values.set_bool(
+                    GALLERY_BINDING_NOTICE_VISIBLE_PATH,
+                    binding_preview.notice_visible,
+                );
+                binding_values.set_bool(
+                    GALLERY_BINDING_BUTTON_DISABLED_PATH,
+                    binding_preview.button_disabled,
                 );
             }
         }

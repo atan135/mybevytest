@@ -495,10 +495,15 @@ fn built_in_zh_cn_texts() -> HashMap<String, String> {
         ("ui_gallery.binding.section", "绑定样例"),
         (
             "ui_gallery.binding.description",
-            "下方文本由 UiBindingValues 驱动。",
+            "下方控件由 UiBindingValues 驱动。",
         ),
         ("ui_gallery.binding.status.initial", "等待绑定更新。"),
         ("ui_gallery.binding.status.updated", "绑定文本已更新"),
+        (
+            "ui_gallery.binding.notice",
+            "这行提示由 bool 可见性绑定控制。",
+        ),
+        ("ui_gallery.binding.bound_button", "绑定按钮"),
         ("ui_gallery.binding.action", "更新绑定"),
         ("ui_gallery.stress.section", "压力样例"),
         (

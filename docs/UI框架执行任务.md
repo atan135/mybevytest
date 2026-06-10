@@ -808,6 +808,14 @@ pub(in crate::game) struct UiInputState {
   - 已补充中英文 i18n 资源和内置中文 fallback。
 - 本阶段仍不接真实页面，不实现可见性 / disabled 绑定，也不引入每帧动态绑定刷新。
 
+- P3-02-03 已实现 bool 绑定：
+  - `UiBindingValues` 新增 bool 值存储，提供 `set_bool(...)`、`bool(...)`、`set_bool_path(...)` 和 `bool_path(...)` API，路径规范复用 `UiBindingPath`。
+  - `UiBindingPlugin` 已注册可见性 apply 系统：`UiBoundVisibility + Visibility` 会根据 bool 值和 `UiVisibilityBindingMode` 写入 `Visibility`；缺值默认按 `false` 处理。
+  - `UiBindingPlugin` 已注册按钮 disabled apply 系统：`UiBoundDisabled + Button` 会根据 bool 值和 `UiDisabledBindingMode` 插入或移除 `DisabledButton`，写入前做差异判断。
+  - `UiGallery` 的 `Binding Sample` 已扩展为文本、可见提示和绑定按钮；点击 `Update Binding` 会同时更新文本并切换提示可见性和按钮 disabled 状态。
+  - 已补充中英文 i18n 资源和内置中文 fallback。
+- 当前 disabled 绑定第一版只支持 `Button` 的 `DisabledButton` marker，暂不处理 `DisabledTextInput`、slider、stepper 或自定义禁用 marker。
+
 ### 通用文本输入框第一版
 
 - 已新增 widgets 层通用文本输入框 `text_input(...)`，根节点使用 `Button + FocusableButton + UiTextInput`，因此可以通过鼠标点击进入焦点，也可以通过现有 `Tab` 焦点系统访问。

@@ -3,13 +3,23 @@
 use bevy::prelude::*;
 use std::collections::HashMap;
 
+use crate::game::ui::widgets::DisabledButton;
+
 pub(in crate::game) struct UiBindingPlugin;
 
 impl Plugin for UiBindingPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<UiBindingValues>()
             .configure_sets(Update, UiBindingSystems::Apply)
-            .add_systems(Update, apply_bound_texts.in_set(UiBindingSystems::Apply));
+            .add_systems(
+                Update,
+                (
+                    apply_bound_texts,
+                    apply_bound_visibility,
+                    apply_bound_button_disabled,
+                )
+                    .in_set(UiBindingSystems::Apply),
+            );
     }
 }
 
@@ -46,6 +56,7 @@ impl AsRef<str> for UiBindingPath {
 #[derive(Clone, Debug, Default, Resource)]
 pub(in crate::game) struct UiBindingValues {
     texts: HashMap<UiBindingPath, String>,
+    bools: HashMap<UiBindingPath, bool>,
 }
 
 impl UiBindingValues {
@@ -84,6 +95,32 @@ impl UiBindingValues {
         self.texts.get(path).map(String::as_str)
     }
 
+    pub(in crate::game) fn set_bool(&mut self, path: impl AsRef<str>, value: bool) -> bool {
+        let Some(path) = UiBindingPath::new(path) else {
+            return false;
+        };
+
+        self.set_bool_path(path, value)
+    }
+
+    pub(in crate::game) fn set_bool_path(&mut self, path: UiBindingPath, value: bool) -> bool {
+        if self.bools.get(&path) == Some(&value) {
+            return false;
+        }
+
+        self.bools.insert(path, value);
+        true
+    }
+
+    pub(in crate::game) fn bool(&self, path: impl AsRef<str>) -> Option<bool> {
+        let path = UiBindingPath::new(path)?;
+        self.bool_path(&path)
+    }
+
+    pub(in crate::game) fn bool_path(&self, path: &UiBindingPath) -> Option<bool> {
+        self.bools.get(path).copied()
+    }
+
     #[allow(dead_code)]
     pub(in crate::game) fn remove_text(&mut self, path: impl AsRef<str>) -> bool {
         let Some(path) = UiBindingPath::new(path) else {
@@ -91,6 +128,15 @@ impl UiBindingValues {
         };
 
         self.texts.remove(&path).is_some()
+    }
+
+    #[allow(dead_code)]
+    pub(in crate::game) fn remove_bool(&mut self, path: impl AsRef<str>) -> bool {
+        let Some(path) = UiBindingPath::new(path) else {
+            return false;
+        };
+
+        self.bools.remove(&path).is_some()
     }
 }
 
@@ -236,6 +282,51 @@ fn apply_bound_texts(
     }
 }
 
+fn apply_bound_visibility(
+    values: Res<UiBindingValues>,
+    mut nodes: Query<(Ref<UiBoundVisibility>, &mut Visibility)>,
+) {
+    let values_changed = values.is_changed();
+
+    for (bound_visibility, mut visibility) in &mut nodes {
+        if !values_changed && !bound_visibility.is_changed() {
+            continue;
+        }
+
+        let value = values.bool_path(&bound_visibility.path).unwrap_or(false);
+        let next_visibility = visibility_from_bound_bool(value, bound_visibility.mode);
+        if *visibility != next_visibility {
+            *visibility = next_visibility;
+        }
+    }
+}
+
+fn apply_bound_button_disabled(
+    mut commands: Commands,
+    values: Res<UiBindingValues>,
+    buttons: Query<(Entity, Ref<UiBoundDisabled>, Has<DisabledButton>), With<Button>>,
+) {
+    let values_changed = values.is_changed();
+
+    for (entity, bound_disabled, is_disabled) in &buttons {
+        if !values_changed && !bound_disabled.is_changed() {
+            continue;
+        }
+
+        let value = values.bool_path(&bound_disabled.path).unwrap_or(false);
+        let next_disabled = is_disabled_from_bound_bool(value, bound_disabled.mode);
+        match disabled_marker_intent(next_disabled) {
+            UiDisabledMarkerIntent::Insert if !is_disabled => {
+                commands.entity(entity).insert(DisabledButton);
+            }
+            UiDisabledMarkerIntent::Remove if is_disabled => {
+                commands.entity(entity).remove::<DisabledButton>();
+            }
+            _ => {}
+        }
+    }
+}
+
 fn normalize_binding_path(path: &str) -> Option<String> {
     let trimmed = path.trim();
     if trimmed.is_empty() {
@@ -294,6 +385,14 @@ mod tests {
         assert_eq!(values.text("gallery.binding.status"), Some("Updated"));
         assert!(!values.set_text("gallery..binding", "Invalid"));
         assert_eq!(values.text("gallery..binding"), None);
+
+        assert!(values.set_bool(" gallery . binding . visible ", true));
+        assert_eq!(values.bool("gallery.binding.visible"), Some(true));
+        assert!(!values.set_bool("gallery.binding.visible", true));
+        assert!(values.set_bool("gallery.binding.visible", false));
+        assert_eq!(values.bool("gallery.binding.visible"), Some(false));
+        assert!(!values.set_bool("gallery..binding", true));
+        assert_eq!(values.bool("gallery..binding"), None);
     }
 
     #[test]
@@ -346,6 +445,58 @@ mod tests {
     }
 
     #[test]
+    fn apply_bound_visibility_uses_bool_values_and_false_fallback() {
+        let mut app = App::new();
+        app.add_plugins(UiBindingPlugin);
+
+        let visible_entity = app
+            .world_mut()
+            .spawn((
+                Visibility::Hidden,
+                UiBoundVisibility::new("gallery.binding.visible").unwrap(),
+            ))
+            .id();
+        let hidden_entity = app
+            .world_mut()
+            .spawn((
+                Visibility::Visible,
+                UiBoundVisibility::with_mode(
+                    "gallery.binding.hidden",
+                    UiVisibilityBindingMode::HiddenWhenTrue,
+                )
+                .unwrap(),
+            ))
+            .id();
+        let fallback_entity = app
+            .world_mut()
+            .spawn((
+                Visibility::Visible,
+                UiBoundVisibility::new("gallery.binding.missing").unwrap(),
+            ))
+            .id();
+
+        {
+            let mut values = app.world_mut().resource_mut::<UiBindingValues>();
+            values.set_bool("gallery.binding.visible", true);
+            values.set_bool("gallery.binding.hidden", true);
+        }
+        app.update();
+
+        assert_eq!(
+            *app.world().get::<Visibility>(visible_entity).unwrap(),
+            Visibility::Visible
+        );
+        assert_eq!(
+            *app.world().get::<Visibility>(hidden_entity).unwrap(),
+            Visibility::Hidden
+        );
+        assert_eq!(
+            *app.world().get::<Visibility>(fallback_entity).unwrap(),
+            Visibility::Hidden
+        );
+    }
+
+    #[test]
     fn disabled_helpers_map_bool_to_marker_intent() {
         assert!(is_disabled_from_bound_bool(
             true,
@@ -360,6 +511,37 @@ mod tests {
             disabled_marker_intent(false),
             UiDisabledMarkerIntent::Remove
         );
+    }
+
+    #[test]
+    fn apply_bound_button_disabled_inserts_and_removes_disabled_button() {
+        let mut app = App::new();
+        app.add_plugins(UiBindingPlugin);
+
+        let button = app
+            .world_mut()
+            .spawn((
+                Button,
+                UiBoundDisabled::new("gallery.binding.disabled").unwrap(),
+            ))
+            .id();
+        app.update();
+
+        assert!(!app.world().entity(button).contains::<DisabledButton>());
+
+        app.world_mut()
+            .resource_mut::<UiBindingValues>()
+            .set_bool("gallery.binding.disabled", true);
+        app.update();
+
+        assert!(app.world().entity(button).contains::<DisabledButton>());
+
+        app.world_mut()
+            .resource_mut::<UiBindingValues>()
+            .set_bool("gallery.binding.disabled", false);
+        app.update();
+
+        assert!(!app.world().entity(button).contains::<DisabledButton>());
     }
 
     #[test]
