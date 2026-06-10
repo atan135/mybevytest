@@ -8,7 +8,7 @@ use bevy::{
 use crate::game::ui::{
     core::{
         UiInputState, UiInputSystems, UiLayer, UiLayerRoot, UiPanelId, UiPanelKind, UiPanelRoot,
-        UiPanelSystems, focus::UiFocusState,
+        UiPanelSystems, focus::UiFocusState, stats::UiStats,
     },
     style::{
         UiFontAssets, UiTheme,
@@ -249,6 +249,7 @@ fn refresh_ui_debug_text(
     mut debug_state: ResMut<UiDebugState>,
     input_state: Res<UiInputState>,
     focus_state: Res<UiFocusState>,
+    stats: Res<UiStats>,
     panels: Query<(
         Entity,
         &UiPanelRoot,
@@ -264,10 +265,10 @@ fn refresh_ui_debug_text(
     let header = ui_debug_header_lines(&debug_state);
     let body = if debug_state.frozen {
         debug_state.frozen_body.clone().unwrap_or_else(|| {
-            build_ui_debug_body(&debug_state, &input_state, &focus_state, &panels)
+            build_ui_debug_body(&debug_state, &input_state, &focus_state, &stats, &panels)
         })
     } else {
-        let body = build_ui_debug_body(&debug_state, &input_state, &focus_state, &panels);
+        let body = build_ui_debug_body(&debug_state, &input_state, &focus_state, &stats, &panels);
         debug_state.frozen_body = Some(body.clone());
         body
     };
@@ -301,6 +302,7 @@ fn build_ui_debug_body(
     debug_state: &UiDebugState,
     input_state: &UiInputState,
     focus_state: &UiFocusState,
+    stats: &UiStats,
     panels: &Query<(
         Entity,
         &UiPanelRoot,
@@ -315,8 +317,10 @@ fn build_ui_debug_body(
         format!("focused_panel: {:?}", input_state.focused_panel),
         format!("top_blocking_panel: {:?}", input_state.top_blocking_panel),
         format!("focused_entity: {:?}", focus_state.focused_entity),
-        "route history:".to_string(),
     ];
+
+    lines.extend(ui_stats_debug_lines(stats));
+    lines.extend([String::new(), "route history:".to_string()]);
 
     if input_state.route_history.is_empty() {
         lines.push("  none".to_string());
@@ -364,6 +368,25 @@ fn build_ui_debug_body(
     }
 
     lines.join("\n")
+}
+
+fn ui_stats_debug_lines(stats: &UiStats) -> Vec<String> {
+    vec![
+        "ui stats:".to_string(),
+        format!(
+            "  nodes: total={} visible={} text={}",
+            stats.ui_node_count, stats.visible_ui_node_count, stats.text_node_count,
+        ),
+        format!(
+            "  panels: total={} page={} hud={} floating={} modal={} blocking={}",
+            stats.panel_count,
+            stats.panel_kind_counts.page,
+            stats.panel_kind_counts.hud,
+            stats.panel_kind_counts.floating,
+            stats.panel_kind_counts.modal,
+            stats.panel_kind_counts.blocking_overlay,
+        ),
+    ]
 }
 
 fn sync_ui_debug_panel_highlights(
@@ -774,5 +797,31 @@ mod tests {
         assert_eq!(window_node.width, Val::Auto);
         assert_eq!(window_node.right, px(theme.layout.overlay_padding));
         assert_eq!(window_node.bottom, px(theme.layout.overlay_padding));
+    }
+
+    #[test]
+    fn ui_stats_debug_lines_include_node_and_panel_counts() {
+        let stats = UiStats {
+            ui_node_count: 12,
+            visible_ui_node_count: 9,
+            text_node_count: 4,
+            panel_count: 5,
+            panel_kind_counts: crate::game::ui::core::stats::UiPanelKindCounts {
+                page: 1,
+                hud: 1,
+                floating: 1,
+                modal: 1,
+                blocking_overlay: 1,
+            },
+        };
+
+        assert_eq!(
+            ui_stats_debug_lines(&stats),
+            vec![
+                "ui stats:",
+                "  nodes: total=12 visible=9 text=4",
+                "  panels: total=5 page=1 hud=1 floating=1 modal=1 blocking=1",
+            ]
+        );
     }
 }

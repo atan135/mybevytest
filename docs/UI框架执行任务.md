@@ -754,6 +754,9 @@ pub(in crate::game) struct UiInputState {
   - `controls.rs`：按钮、文本输入和控件显示系统仍在 `Update` 中运行；本轮已补充若干差异写入保护，并把 slider / stepper 数值显示同步收窄到 `Changed<UiSlider>` / `Changed<UiStepper>`。
   - `debug.rs`：F3 文本仍按帧构建以便观察输入路由；高亮系统在调试关闭且高亮关闭时会直接早退，避免无意义扫描 Panel。
   - `stats.rs`：统计仍保留每帧全量采集，但只有统计值变化时才写回 `UiStats`，减少下游 `Changed<UiStats>` 误触发。
+- P3-03-03 已把 `UiStats` 接入 F3 调试面板正文：
+  - 显示 `ui stats` 区域，包含 UI `Node` 总数、可见 `Node` 数、`Text` 节点数，以及 Panel 总数和 `page / hud / floating / modal / blocking` 分类计数。
+  - 统计信息属于 F3 body，按 `F4` 冻结时会随 route history 和 panel 列表一起冻结；header 仍继续显示当前 `freeze / filter / highlight / target` 状态。
 - 当前保留的成本：`UiStats` 每帧全量扫描 UI 节点，F3 打开时调试文本每帧构建。这两处是诊断能力的有意成本，后续可按需增加采样间隔、dirty marker 或只在独立调试窗口打开时提高采样频率。
 
 ### 通用文本输入框第一版
