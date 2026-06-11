@@ -8,8 +8,15 @@ pub(in crate::game) struct UiViewportPlugin;
 
 impl Plugin for UiViewportPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<UiViewport>()
-            .init_resource::<UiMetrics>()
+        let initial_viewport = initial_ui_viewport(app.world());
+        let initial_metrics = if let Some(theme) = app.world().get_resource::<UiTheme>() {
+            UiMetrics::from_viewport_and_theme(&initial_viewport, theme)
+        } else {
+            UiMetrics::from_viewport_and_theme(&initial_viewport, &UiTheme::default())
+        };
+
+        app.insert_resource(initial_viewport)
+            .insert_resource(initial_metrics)
             .add_systems(Update, update_ui_viewport_metrics);
     }
 }
@@ -314,6 +321,35 @@ fn runtime_window_size_source(window: &Window) -> ViewportSizeSource {
     }
 }
 
+fn initial_ui_viewport(world: &World) -> UiViewport {
+    #[cfg(not(target_os = "android"))]
+    if let Some(config) = world.get_resource::<WindowStartupConfig>() {
+        return viewport_from_startup_config(config, default_input_mode(), platform_safe_area());
+    }
+
+    UiViewport::default()
+}
+
+#[cfg(not(target_os = "android"))]
+fn viewport_from_startup_config(
+    config: &WindowStartupConfig,
+    input_mode: UiInputMode,
+    safe_area: UiSafeArea,
+) -> UiViewport {
+    UiViewport::from_logical_size(
+        config.logical_width(),
+        config.logical_height(),
+        config.logical_width(),
+        config.logical_height(),
+        config.size.width as f32,
+        config.size.height as f32,
+        config.device_scale,
+        config.preview_scale,
+        input_mode,
+        safe_area,
+    )
+}
+
 fn width_class_for(logical_width: f32) -> UiWidthClass {
     if logical_width < 480.0 {
         UiWidthClass::Compact
@@ -437,5 +473,24 @@ mod tests {
         assert_eq!(viewport.device_scale, 3.25);
         assert_eq!(viewport.preview_scale, 0.5);
         assert_eq!(viewport.window_logical_width, 196.92308);
+    }
+
+    #[cfg(not(target_os = "android"))]
+    #[test]
+    fn viewport_from_startup_config_is_available_before_first_update() {
+        let config = WindowStartupConfig {
+            size: crate::config::window::WindowSize::new(1280, 2772),
+            device_scale: 3.25,
+            preview_scale: 0.5,
+            warnings: Vec::new(),
+        };
+        let viewport =
+            viewport_from_startup_config(&config, UiInputMode::MouseTouch, UiSafeArea::default());
+
+        assert_eq!(viewport.width_class, UiWidthClass::Compact);
+        assert_eq!(viewport.height_class, UiHeightClass::Tall);
+        assert_eq!(viewport.orientation, UiOrientation::Portrait);
+        assert_eq!(viewport.device_width, 1280.0);
+        assert_eq!(viewport.device_height, 2772.0);
     }
 }
