@@ -16,15 +16,21 @@ pub fn run() {
     let default_plugins = DefaultPlugins.set(project_asset_plugin());
 
     #[cfg(not(target_os = "android"))]
-    let default_plugins = default_plugins.set(project_window_plugin());
+    let window_config = config::window::resolve_from_env_args();
 
-    App::new()
-        .add_plugins(default_plugins)
+    #[cfg(not(target_os = "android"))]
+    let default_plugins = default_plugins.set(project_window_plugin(&window_config));
+
+    let mut app = App::new();
+    app.add_plugins(default_plugins)
         .add_plugins(network::NetworkPlugin)
         .add_plugins(authority::AuthorityPlugin)
-        .add_plugins(myserver::MyServerPlugin)
-        .add_plugins(game::GamePlugin)
-        .run();
+        .add_plugins(myserver::MyServerPlugin);
+
+    #[cfg(not(target_os = "android"))]
+    app.insert_resource(window_config);
+
+    app.add_plugins(game::GamePlugin).run();
 }
 
 fn project_asset_plugin() -> AssetPlugin {
@@ -43,9 +49,7 @@ fn project_asset_plugin() -> AssetPlugin {
 }
 
 #[cfg(not(target_os = "android"))]
-fn project_window_plugin() -> WindowPlugin {
-    let window_config = config::window::resolve_from_env_args();
-
+fn project_window_plugin(window_config: &config::window::WindowStartupConfig) -> WindowPlugin {
     for warning in &window_config.warnings {
         eprintln!("window config warning: {warning}");
     }

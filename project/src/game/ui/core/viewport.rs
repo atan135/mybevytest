@@ -1,5 +1,7 @@
 use bevy::{prelude::*, window::PrimaryWindow};
 
+#[cfg(not(target_os = "android"))]
+use crate::config::window::WindowStartupConfig;
 use crate::game::ui::style::UiTheme;
 
 pub(in crate::game) struct UiViewportPlugin;
@@ -16,6 +18,12 @@ impl Plugin for UiViewportPlugin {
 pub(in crate::game) struct UiViewport {
     pub logical_width: f32,
     pub logical_height: f32,
+    pub window_logical_width: f32,
+    pub window_logical_height: f32,
+    pub device_width: f32,
+    pub device_height: f32,
+    pub device_scale: f32,
+    pub preview_scale: f32,
     pub width_class: UiWidthClass,
     pub height_class: UiHeightClass,
     pub orientation: UiOrientation,
@@ -78,7 +86,7 @@ pub(in crate::game) struct UiMetrics {
 
 impl Default for UiViewport {
     fn default() -> Self {
-        Self::from_logical_size(
+        Self::from_device_logical_size(
             1280.0,
             720.0,
             UiInputMode::MouseTouch,
@@ -88,18 +96,52 @@ impl Default for UiViewport {
 }
 
 impl UiViewport {
-    pub(in crate::game) fn from_logical_size(
+    pub(in crate::game) fn from_device_logical_size(
         logical_width: f32,
         logical_height: f32,
         input_mode: UiInputMode,
         safe_area: UiSafeArea,
     ) -> Self {
+        Self::from_logical_size(
+            logical_width,
+            logical_height,
+            logical_width,
+            logical_height,
+            logical_width,
+            logical_height,
+            1.0,
+            1.0,
+            input_mode,
+            safe_area,
+        )
+    }
+
+    pub(in crate::game) fn from_logical_size(
+        logical_width: f32,
+        logical_height: f32,
+        window_logical_width: f32,
+        window_logical_height: f32,
+        device_width: f32,
+        device_height: f32,
+        device_scale: f32,
+        preview_scale: f32,
+        input_mode: UiInputMode,
+        safe_area: UiSafeArea,
+    ) -> Self {
         let logical_width = logical_width.max(1.0);
         let logical_height = logical_height.max(1.0);
+        let window_logical_width = window_logical_width.max(1.0);
+        let window_logical_height = window_logical_height.max(1.0);
 
         Self {
             logical_width,
             logical_height,
+            window_logical_width,
+            window_logical_height,
+            device_width: device_width.max(1.0),
+            device_height: device_height.max(1.0),
+            device_scale: device_scale.max(1.0),
+            preview_scale: preview_scale.max(0.01),
             width_class: width_class_for(logical_width),
             height_class: height_class_for(logical_height),
             orientation: orientation_for(logical_width, logical_height),
@@ -111,6 +153,18 @@ impl UiViewport {
     pub(in crate::game) fn safe_area_padding(self, base: f32) -> UiRect {
         self.safe_area.padding_with_base(base)
     }
+}
+
+#[derive(Clone, Copy, Debug)]
+struct ViewportSizeSource {
+    logical_width: f32,
+    logical_height: f32,
+    window_logical_width: f32,
+    window_logical_height: f32,
+    device_width: f32,
+    device_height: f32,
+    device_scale: f32,
+    preview_scale: f32,
 }
 
 impl UiSafeArea {
@@ -181,13 +235,30 @@ impl UiMetrics {
 
 fn update_ui_viewport_metrics(
     window: Single<&Window, With<PrimaryWindow>>,
+    #[cfg(not(target_os = "android"))] startup_config: Option<Res<WindowStartupConfig>>,
     theme: Res<UiTheme>,
     mut viewport: ResMut<UiViewport>,
     mut metrics: ResMut<UiMetrics>,
 ) {
+    let size_source = viewport_size_source(&window, {
+        #[cfg(not(target_os = "android"))]
+        {
+            startup_config.as_deref()
+        }
+        #[cfg(target_os = "android")]
+        {
+            None::<&()>
+        }
+    });
     let next_viewport = UiViewport::from_logical_size(
-        window.width(),
-        window.height(),
+        size_source.logical_width,
+        size_source.logical_height,
+        size_source.window_logical_width,
+        size_source.window_logical_height,
+        size_source.device_width,
+        size_source.device_height,
+        size_source.device_scale,
+        size_source.preview_scale,
         default_input_mode(),
         platform_safe_area(),
     );
@@ -201,6 +272,45 @@ fn update_ui_viewport_metrics(
         if *metrics != next_metrics {
             *metrics = next_metrics;
         }
+    }
+}
+
+#[cfg(not(target_os = "android"))]
+fn viewport_size_source(
+    window: &Window,
+    startup_config: Option<&WindowStartupConfig>,
+) -> ViewportSizeSource {
+    if let Some(config) = startup_config {
+        return ViewportSizeSource {
+            logical_width: config.logical_width(),
+            logical_height: config.logical_height(),
+            window_logical_width: window.width(),
+            window_logical_height: window.height(),
+            device_width: config.size.width as f32,
+            device_height: config.size.height as f32,
+            device_scale: config.device_scale,
+            preview_scale: config.preview_scale,
+        };
+    }
+
+    runtime_window_size_source(window)
+}
+
+#[cfg(target_os = "android")]
+fn viewport_size_source(window: &Window, _startup_config: Option<&()>) -> ViewportSizeSource {
+    runtime_window_size_source(window)
+}
+
+fn runtime_window_size_source(window: &Window) -> ViewportSizeSource {
+    ViewportSizeSource {
+        logical_width: window.width(),
+        logical_height: window.height(),
+        window_logical_width: window.width(),
+        window_logical_height: window.height(),
+        device_width: window.physical_width() as f32,
+        device_height: window.physical_height() as f32,
+        device_scale: window.scale_factor() as f32,
+        preview_scale: 1.0,
     }
 }
 
@@ -246,7 +356,7 @@ mod tests {
 
     #[test]
     fn classifies_phone_portrait_logical_size() {
-        let viewport = UiViewport::from_logical_size(
+        let viewport = UiViewport::from_device_logical_size(
             394.0,
             853.0,
             UiInputMode::MouseTouch,
@@ -260,7 +370,7 @@ mod tests {
 
     #[test]
     fn classifies_desktop_landscape_logical_size() {
-        let viewport = UiViewport::from_logical_size(
+        let viewport = UiViewport::from_device_logical_size(
             1280.0,
             720.0,
             UiInputMode::MouseTouch,
@@ -274,7 +384,7 @@ mod tests {
 
     #[test]
     fn compact_metrics_keep_buttons_at_touch_target() {
-        let viewport = UiViewport::from_logical_size(
+        let viewport = UiViewport::from_device_logical_size(
             394.0,
             853.0,
             UiInputMode::MouseTouch,
@@ -303,5 +413,29 @@ mod tests {
                 bottom: px(14.0),
             }
         );
+    }
+
+    #[test]
+    fn viewport_keeps_startup_device_and_preview_logical_sizes_distinct() {
+        let viewport = UiViewport::from_logical_size(
+            393.84616,
+            852.9231,
+            196.92308,
+            426.46155,
+            1280.0,
+            2772.0,
+            3.25,
+            0.5,
+            UiInputMode::MouseTouch,
+            UiSafeArea::default(),
+        );
+
+        assert_eq!(viewport.width_class, UiWidthClass::Compact);
+        assert_eq!(viewport.height_class, UiHeightClass::Tall);
+        assert_eq!(viewport.orientation, UiOrientation::Portrait);
+        assert_eq!(viewport.device_width, 1280.0);
+        assert_eq!(viewport.device_scale, 3.25);
+        assert_eq!(viewport.preview_scale, 0.5);
+        assert_eq!(viewport.window_logical_width, 196.92308);
     }
 }

@@ -1114,7 +1114,7 @@ fn gallery_button_columns() -> UiResponsiveGridColumns {
 }
 
 fn gallery_icon_button_columns() -> UiResponsiveGridColumns {
-    UiResponsiveGridColumns::new(3, 5, 5)
+    UiResponsiveGridColumns::new(3, 4, 5)
 }
 
 fn gallery_selection_columns() -> UiResponsiveGridColumns {

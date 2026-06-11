@@ -62,7 +62,7 @@ impl WindowDevicePreset {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, bevy::prelude::Resource)]
 pub(crate) struct WindowStartupConfig {
     pub size: WindowSize,
     pub device_scale: f32,

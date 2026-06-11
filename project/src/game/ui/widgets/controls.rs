@@ -1630,6 +1630,8 @@ fn slider_bundle<T: Bundle>(
             min_height: px(metrics.input_height),
             align_items: AlignItems::Center,
             column_gap: px(numeric_control_gap(metrics)),
+            row_gap: px(metrics.control_gap),
+            flex_wrap: FlexWrap::Wrap,
             padding: UiRect::axes(px(control_padding_x(metrics)), px(0)),
             border: UiRect::all(px(theme.panel.border)),
             border_radius: BorderRadius::all(px(theme.button.radius)),
@@ -1657,6 +1659,7 @@ fn slider_bundle<T: Bundle>(
                     font_size: theme.text.button,
                     ..default()
                 },
+                TextLayout::new_with_justify(Justify::Center),
                 TextColor(value_color.color(theme)),
                 value_color,
                 UiThemeTextStyleRole::Button,
@@ -1862,7 +1865,9 @@ fn numeric_control_gap(metrics: &UiMetrics) -> f32 {
 }
 
 fn numeric_control_label_width(metrics: &UiMetrics) -> f32 {
-    NUMERIC_CONTROL_LABEL_WIDTH.max(metrics.content_max_width * 0.16)
+    NUMERIC_CONTROL_LABEL_WIDTH
+        .min(metrics.content_max_width * 0.34)
+        .max(72.0)
 }
 
 fn slider_track_height(metrics: &UiMetrics) -> f32 {
@@ -1880,6 +1885,7 @@ fn stepper_value_min_height(metrics: &UiMetrics) -> f32 {
 fn slider_label_node(metrics: &UiMetrics) -> Node {
     Node {
         width: px(numeric_control_label_width(metrics)),
+        flex_shrink: 0.0,
         ..default()
     }
 }
@@ -1887,8 +1893,10 @@ fn slider_label_node(metrics: &UiMetrics) -> Node {
 fn slider_track_node(metrics: &UiMetrics) -> Node {
     let track_height = slider_track_height(metrics);
     Node {
+        min_width: px(slider_track_min_width(metrics)),
         height: px(track_height),
         flex_grow: 1.0,
+        flex_shrink: 1.0,
         overflow: Overflow::clip(),
         border_radius: BorderRadius::all(px(track_height * 0.5)),
         ..default()
@@ -1898,6 +1906,7 @@ fn slider_track_node(metrics: &UiMetrics) -> Node {
 fn slider_value_node(metrics: &UiMetrics) -> Node {
     Node {
         width: px(stepper_value_width(metrics)),
+        flex_shrink: 0.0,
         justify_content: JustifyContent::FlexEnd,
         ..default()
     }
@@ -1906,6 +1915,7 @@ fn slider_value_node(metrics: &UiMetrics) -> Node {
 fn stepper_label_node(metrics: &UiMetrics) -> Node {
     Node {
         width: px(numeric_control_label_width(metrics)),
+        flex_shrink: 0.0,
         ..default()
     }
 }
@@ -1921,6 +1931,10 @@ fn stepper_value_node(metrics: &UiMetrics) -> Node {
         border_radius: BorderRadius::all(px(4)),
         ..default()
     }
+}
+
+fn slider_track_min_width(metrics: &UiMetrics) -> f32 {
+    (metrics.touch_target_min * 3.0).min(metrics.content_max_width * 0.42)
 }
 
 fn selection_button_background_color(

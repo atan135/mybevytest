@@ -523,9 +523,15 @@ fn ui_stats_debug_lines(stats: &UiStats) -> Vec<String> {
 
 fn ui_viewport_debug_line(viewport: &UiViewport) -> String {
     format!(
-        "viewport: {:.0}x{:.0} {:?}/{:?} {:?}",
+        "viewport: ui={:.0}x{:.0} device={:.0}x{:.0} scale={:.2} preview={:.2} window={:.0}x{:.0} {:?}/{:?} {:?}",
         viewport.logical_width,
         viewport.logical_height,
+        viewport.device_width,
+        viewport.device_height,
+        viewport.device_scale,
+        viewport.preview_scale,
+        viewport.window_logical_width,
+        viewport.window_logical_height,
         viewport.width_class,
         viewport.height_class,
         viewport.orientation,
@@ -1379,7 +1385,7 @@ mod tests {
     }
 
     fn viewport(width: f32, height: f32) -> UiViewport {
-        UiViewport::from_logical_size(
+        UiViewport::from_device_logical_size(
             width,
             height,
             UiInputMode::MouseTouch,
@@ -1565,7 +1571,7 @@ mod tests {
         let viewport_line = ui_viewport_debug_line(&viewport);
         let metrics_line = ui_metrics_debug_line(&metrics);
 
-        assert!(viewport_line.contains("viewport: 394x853"));
+        assert!(viewport_line.contains("ui=394x853"));
         assert!(viewport_line.contains("Compact"));
         assert!(viewport_line.contains("Portrait"));
         assert!(metrics_line.contains("content_max="));
