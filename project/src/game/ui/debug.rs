@@ -7,8 +7,8 @@ use bevy::{
 
 use crate::game::ui::{
     core::{
-        UiInputState, UiInputSystems, UiLayer, UiLayerRoot, UiPanelId, UiPanelKind, UiPanelRoot,
-        UiPanelSystems, focus::UiFocusState, stats::UiStats,
+        UiInputState, UiInputSystems, UiLayer, UiLayerRoot, UiMetrics, UiPanelId, UiPanelKind,
+        UiPanelRoot, UiPanelSystems, UiViewport, UiWidthClass, focus::UiFocusState, stats::UiStats,
     },
     style::{
         UiFontAssets, UiTheme,
@@ -25,7 +25,6 @@ const UI_DEBUG_RENDER_LAYER: usize = 31;
 const UI_DEBUG_TREE_MAX_LINES: usize = 24;
 const UI_DEBUG_LAYOUT_BOUNDS_MAX_LINES: usize = 16;
 const UI_DEBUG_COPY_LOG_PREVIEW_CHARS: usize = 8_000;
-const UI_DEBUG_GAME_BODY_MAX_HEIGHT: f32 = 560.0;
 
 pub(in crate::game) struct UiDebugPlugin;
 
@@ -188,6 +187,8 @@ fn handle_ui_debug_keys(
 fn sync_ui_debug_panel(
     mut commands: Commands,
     theme: Res<UiTheme>,
+    metrics: Res<UiMetrics>,
+    viewport: Res<UiViewport>,
     fonts: Res<UiFontAssets>,
     mut debug_state: ResMut<UiDebugState>,
     debug_roots: Query<Entity, With<UiDebugRoot>>,
@@ -258,6 +259,8 @@ fn sync_ui_debug_panel(
         debug_state.root = Some(spawn_ui_debug_panel(
             &mut commands,
             &theme,
+            &metrics,
+            &viewport,
             &fonts,
             debug_state.target,
             target_camera,
@@ -269,6 +272,8 @@ fn refresh_ui_debug_text(
     mut debug_state: ResMut<UiDebugState>,
     input_state: Res<UiInputState>,
     focus_state: Res<UiFocusState>,
+    metrics: Res<UiMetrics>,
+    viewport: Res<UiViewport>,
     stats: Res<UiStats>,
     panels: Query<(
         Entity,
@@ -310,6 +315,8 @@ fn refresh_ui_debug_text(
     let (header, body, display) = build_ui_debug_display_parts(&mut debug_state, |debug_state| {
         build_ui_debug_body(
             debug_state,
+            &viewport,
+            &metrics,
             &input_state,
             &focus_state,
             &stats,
@@ -412,6 +419,8 @@ fn ui_debug_header_lines(debug_state: &UiDebugState) -> Vec<String> {
 
 fn build_ui_debug_body(
     debug_state: &UiDebugState,
+    viewport: &UiViewport,
+    metrics: &UiMetrics,
     input_state: &UiInputState,
     focus_state: &UiFocusState,
     stats: &UiStats,
@@ -449,6 +458,9 @@ fn build_ui_debug_body(
     >,
 ) -> String {
     let mut lines = vec![
+        ui_viewport_debug_line(viewport),
+        ui_metrics_debug_line(metrics),
+        String::new(),
         format!("pointer_blocked: {}", input_state.pointer_blocked),
         format!("block_reason: {}", input_state.pointer_block_reason),
         format!("route_summary: {}", input_state.route_summary),
@@ -507,6 +519,27 @@ fn ui_stats_debug_lines(stats: &UiStats) -> Vec<String> {
             stats.panel_kind_counts.blocking_overlay,
         ),
     ]
+}
+
+fn ui_viewport_debug_line(viewport: &UiViewport) -> String {
+    format!(
+        "viewport: {:.0}x{:.0} {:?}/{:?} {:?}",
+        viewport.logical_width,
+        viewport.logical_height,
+        viewport.width_class,
+        viewport.height_class,
+        viewport.orientation,
+    )
+}
+
+fn ui_metrics_debug_line(metrics: &UiMetrics) -> String {
+    format!(
+        "metrics: content_max={:.0} dialog_max={:.0} padding={:.0} gap={:.0}",
+        metrics.content_max_width,
+        metrics.dialog_max_width,
+        metrics.page_padding,
+        metrics.control_gap,
+    )
 }
 
 #[derive(Clone, Debug)]
@@ -900,11 +933,13 @@ fn sync_ui_debug_panel_highlights(
 fn spawn_ui_debug_panel(
     commands: &mut Commands,
     theme: &UiTheme,
+    metrics: &UiMetrics,
+    viewport: &UiViewport,
     fonts: &UiFontAssets,
     target: UiDebugDisplayTarget,
     target_camera: Option<Entity>,
 ) -> Entity {
-    let node = ui_debug_panel_node(theme, target);
+    let node = ui_debug_panel_node(theme, metrics, viewport, target);
 
     let mut root = commands.spawn((
         UiDebugRoot,
@@ -966,10 +1001,10 @@ fn spawn_ui_debug_panel(
             UiDebugNode,
             UiScrollView,
             ScrollPosition(Vec2::ZERO),
-            ui_debug_body_scroll_node(target),
+            ui_debug_body_scroll_node(metrics, viewport, target),
             Pickable {
                 is_hoverable: true,
-                should_block_lower: false,
+                should_block_lower: true,
             },
         ))
         .with_children(|body| {
@@ -994,32 +1029,42 @@ fn spawn_ui_debug_panel(
     .id()
 }
 
-fn ui_debug_body_scroll_node(target: UiDebugDisplayTarget) -> Node {
+fn ui_debug_body_scroll_node(
+    metrics: &UiMetrics,
+    viewport: &UiViewport,
+    target: UiDebugDisplayTarget,
+) -> Node {
     let mut node = Node {
         width: percent(100),
         flex_grow: 1.0,
         flex_direction: FlexDirection::Column,
+        row_gap: px(metrics.control_gap),
         overflow: Overflow::scroll_y(),
         ..default()
     };
 
     if target == UiDebugDisplayTarget::GameWindow {
-        node.max_height = px(UI_DEBUG_GAME_BODY_MAX_HEIGHT);
+        node.max_height = px(ui_debug_game_body_max_height(metrics, viewport));
     }
 
     node
 }
 
-fn ui_debug_panel_node(theme: &UiTheme, target: UiDebugDisplayTarget) -> Node {
-    let overlay_padding = px(theme.layout.overlay_padding);
+fn ui_debug_panel_node(
+    theme: &UiTheme,
+    metrics: &UiMetrics,
+    viewport: &UiViewport,
+    target: UiDebugDisplayTarget,
+) -> Node {
+    let overlay_padding = px(metrics.page_padding);
 
     let mut node = Node {
         position_type: PositionType::Absolute,
         left: overlay_padding,
         top: overlay_padding,
         flex_direction: FlexDirection::Column,
-        row_gap: px(theme.layout.row_gap),
-        padding: UiRect::all(px(14)),
+        row_gap: px(metrics.control_gap),
+        padding: UiRect::all(px(ui_debug_panel_padding(metrics))),
         border: UiRect::all(px(theme.panel.border)),
         border_radius: BorderRadius::all(px(theme.panel.radius)),
         ..default()
@@ -1027,9 +1072,9 @@ fn ui_debug_panel_node(theme: &UiTheme, target: UiDebugDisplayTarget) -> Node {
 
     match target {
         UiDebugDisplayTarget::GameWindow => {
-            node.width = px(430);
-            node.max_width = percent(94);
-            node.max_height = percent(92);
+            node.width = px(ui_debug_game_panel_width(metrics, viewport));
+            node.max_width = percent(ui_debug_game_panel_max_width_percent(viewport));
+            node.max_height = percent(ui_debug_game_panel_max_height_percent(viewport));
         }
         UiDebugDisplayTarget::DedicatedWindow => {
             node.right = overlay_padding;
@@ -1040,6 +1085,43 @@ fn ui_debug_panel_node(theme: &UiTheme, target: UiDebugDisplayTarget) -> Node {
     }
 
     node
+}
+
+fn ui_debug_panel_padding(metrics: &UiMetrics) -> f32 {
+    metrics.control_gap.max(10.0)
+}
+
+fn ui_debug_game_panel_width(metrics: &UiMetrics, viewport: &UiViewport) -> f32 {
+    let safe_horizontal = viewport.safe_area.left + viewport.safe_area.right;
+    let available =
+        (viewport.logical_width - safe_horizontal - metrics.page_padding * 2.0).max(1.0);
+    let target = match viewport.width_class {
+        UiWidthClass::Compact => available * 0.92,
+        UiWidthClass::Medium => metrics.dialog_max_width.min(520.0),
+        UiWidthClass::Expanded => metrics.dialog_max_width.min(560.0),
+    };
+
+    target.min(available).max(metrics.touch_target_min * 4.0)
+}
+
+fn ui_debug_game_panel_max_width_percent(viewport: &UiViewport) -> f32 {
+    match viewport.width_class {
+        UiWidthClass::Compact => 92.0,
+        UiWidthClass::Medium | UiWidthClass::Expanded => 94.0,
+    }
+}
+
+fn ui_debug_game_panel_max_height_percent(viewport: &UiViewport) -> f32 {
+    match viewport.width_class {
+        UiWidthClass::Compact => 78.0,
+        UiWidthClass::Medium | UiWidthClass::Expanded => 88.0,
+    }
+}
+
+fn ui_debug_game_body_max_height(metrics: &UiMetrics, viewport: &UiViewport) -> f32 {
+    let safe_vertical = viewport.safe_area.top + viewport.safe_area.bottom;
+    let available = (viewport.logical_height - safe_vertical - metrics.page_padding * 2.0).max(1.0);
+    (available * 0.62).clamp(metrics.touch_target_min * 3.0, 560.0)
 }
 
 fn spawn_ui_debug_window(commands: &mut Commands) -> (Entity, Entity) {
@@ -1255,6 +1337,7 @@ fn panel_id_order(id: UiPanelId) -> u8 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::game::ui::core::{UiInputMode, UiSafeArea};
 
     fn entity(index: u32) -> Entity {
         Entity::from_raw_u32(index).unwrap()
@@ -1306,6 +1389,15 @@ mod tests {
             inherited_visible: "inherited-visible",
             stack_index: index,
         }
+    }
+
+    fn viewport(width: f32, height: f32) -> UiViewport {
+        UiViewport::from_logical_size(
+            width,
+            height,
+            UiInputMode::MouseTouch,
+            UiSafeArea::default(),
+        )
     }
 
     #[test]
@@ -1412,14 +1504,85 @@ mod tests {
     #[test]
     fn debug_panel_node_uses_wide_layout_for_dedicated_window() {
         let theme = UiTheme::default();
-        let game_node = ui_debug_panel_node(&theme, UiDebugDisplayTarget::GameWindow);
-        let window_node = ui_debug_panel_node(&theme, UiDebugDisplayTarget::DedicatedWindow);
+        let viewport = viewport(1280.0, 720.0);
+        let metrics = UiMetrics::from_viewport_and_theme(&viewport, &theme);
+        let game_node = ui_debug_panel_node(
+            &theme,
+            &metrics,
+            &viewport,
+            UiDebugDisplayTarget::GameWindow,
+        );
+        let window_node = ui_debug_panel_node(
+            &theme,
+            &metrics,
+            &viewport,
+            UiDebugDisplayTarget::DedicatedWindow,
+        );
 
-        assert_eq!(game_node.width, px(430));
+        assert_eq!(
+            game_node.width,
+            px(ui_debug_game_panel_width(&metrics, &viewport))
+        );
         assert_eq!(game_node.right, Val::Auto);
         assert_eq!(window_node.width, Val::Auto);
-        assert_eq!(window_node.right, px(theme.layout.overlay_padding));
-        assert_eq!(window_node.bottom, px(theme.layout.overlay_padding));
+        assert_eq!(window_node.right, px(metrics.page_padding));
+        assert_eq!(window_node.bottom, px(metrics.page_padding));
+    }
+
+    #[test]
+    fn debug_panel_node_uses_compact_game_window_width() {
+        let theme = UiTheme::default();
+        let viewport = viewport(394.0, 853.0);
+        let metrics = UiMetrics::from_viewport_and_theme(&viewport, &theme);
+        let node = ui_debug_panel_node(
+            &theme,
+            &metrics,
+            &viewport,
+            UiDebugDisplayTarget::GameWindow,
+        );
+
+        assert_eq!(
+            node.width,
+            px(ui_debug_game_panel_width(&metrics, &viewport))
+        );
+        assert_eq!(node.max_width, percent(92.0));
+        assert_eq!(node.max_height, percent(78.0));
+    }
+
+    #[test]
+    fn debug_panel_node_uses_expanded_game_window_width() {
+        let theme = UiTheme::default();
+        let viewport = viewport(1280.0, 720.0);
+        let metrics = UiMetrics::from_viewport_and_theme(&viewport, &theme);
+        let node = ui_debug_panel_node(
+            &theme,
+            &metrics,
+            &viewport,
+            UiDebugDisplayTarget::GameWindow,
+        );
+
+        assert_eq!(
+            node.width,
+            px(ui_debug_game_panel_width(&metrics, &viewport))
+        );
+        assert_eq!(node.max_width, percent(94.0));
+        assert_eq!(node.max_height, percent(88.0));
+    }
+
+    #[test]
+    fn debug_viewport_and_metrics_lines_include_summary_values() {
+        let theme = UiTheme::default();
+        let viewport = viewport(394.0, 853.0);
+        let metrics = UiMetrics::from_viewport_and_theme(&viewport, &theme);
+
+        let viewport_line = ui_viewport_debug_line(&viewport);
+        let metrics_line = ui_metrics_debug_line(&metrics);
+
+        assert!(viewport_line.contains("viewport: 394x853"));
+        assert!(viewport_line.contains("Compact"));
+        assert!(viewport_line.contains("Portrait"));
+        assert!(metrics_line.contains("content_max="));
+        assert!(metrics_line.contains("dialog_max="));
     }
 
     #[test]
