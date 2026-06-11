@@ -3,7 +3,7 @@ use bevy::{input::keyboard::Key, prelude::*};
 use crate::game::{
     navigation::AppUiMode,
     ui::{
-        core::{UiLayer, UiLayerRoot, UiMetrics, UiViewport},
+        core::{UiLayer, UiLayerRoot, UiMetrics, UiViewport, UiWidthClass},
         overlays::{
             loading::{UiLoading, spawn_loading},
             modal::{UiConfirmModal, spawn_confirm_modal},
@@ -12,8 +12,8 @@ use crate::game::{
         style::{
             UiFontAssets, UiTheme,
             theme::{
-                UiThemeBackgroundRole, UiThemeBorderRole, UiThemePanelNodeRole,
-                UiThemeRootNodeRole, UiThemeTextColorRole, UiThemeTextStyleRole,
+                UiThemeBackgroundRole, UiThemeBorderRole, UiThemeRootNodeRole,
+                UiThemeTextColorRole, UiThemeTextStyleRole,
             },
         },
         widgets::{screen_label, screen_title},
@@ -228,7 +228,15 @@ fn open_panel(
             );
         }
         UiPanelRequest::Floating(floating) => {
-            spawn_floating_panel(commands, theme, fonts, floating, Some(*current_mode.get()));
+            spawn_floating_panel(
+                commands,
+                theme,
+                metrics,
+                viewport,
+                fonts,
+                floating,
+                Some(*current_mode.get()),
+            );
         }
     }
 
@@ -389,6 +397,8 @@ fn write_close_top_on_return_input(
 fn spawn_floating_panel(
     commands: &mut Commands,
     theme: &UiTheme,
+    metrics: &UiMetrics,
+    viewport: &UiViewport,
     fonts: &UiFontAssets,
     floating: &UiFloatingPanel,
     owner_mode: Option<AppUiMode>,
@@ -405,19 +415,7 @@ fn spawn_floating_panel(
             },
             Button,
             UiThemeRootNodeRole::FloatingPanel,
-            UiThemePanelNodeRole::Standard,
-            Node {
-                position_type: PositionType::Absolute,
-                right: px(theme.layout.screen_padding),
-                top: px(96),
-                width: px(340),
-                flex_direction: FlexDirection::Column,
-                row_gap: px(theme.layout.card_gap),
-                padding: UiRect::all(px(theme.panel.padding)),
-                border: UiRect::all(px(theme.panel.border)),
-                border_radius: BorderRadius::all(px(theme.panel.radius)),
-                ..default()
-            },
+            floating_panel_node(theme, metrics, viewport),
             ZIndex(80),
             BackgroundColor(theme.colors.panel_background),
             BorderColor::all(theme.colors.panel_border),
@@ -449,4 +447,76 @@ fn spawn_floating_panel(
                 ));
             }
         });
+}
+
+fn floating_panel_node(theme: &UiTheme, metrics: &UiMetrics, viewport: &UiViewport) -> Node {
+    Node {
+        position_type: PositionType::Absolute,
+        right: px(metrics.page_padding + viewport.safe_area.right),
+        top: px(floating_panel_top(metrics, viewport)),
+        width: px(floating_panel_width(metrics, viewport)),
+        max_width: percent(94),
+        max_height: percent(floating_panel_max_height_percent(viewport)),
+        flex_direction: FlexDirection::Column,
+        row_gap: px(metrics.control_gap),
+        padding: UiRect::all(px(metrics.panel_padding)),
+        border: UiRect::all(px(theme.panel.border)),
+        border_radius: BorderRadius::all(px(theme.panel.radius)),
+        ..default()
+    }
+}
+
+fn floating_panel_width(metrics: &UiMetrics, viewport: &UiViewport) -> f32 {
+    let safe_horizontal = viewport.safe_area.left + viewport.safe_area.right;
+    let available =
+        (viewport.logical_width - safe_horizontal - metrics.page_padding * 2.0).max(1.0);
+    metrics.dialog_max_width.min(420.0).min(available)
+}
+
+fn floating_panel_top(metrics: &UiMetrics, viewport: &UiViewport) -> f32 {
+    metrics.page_padding + viewport.safe_area.top + metrics.touch_target_min
+}
+
+fn floating_panel_max_height_percent(viewport: &UiViewport) -> f32 {
+    match viewport.width_class {
+        UiWidthClass::Compact => 72.0,
+        UiWidthClass::Medium | UiWidthClass::Expanded => 82.0,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn floating_panel_width_uses_metrics_dialog_width() {
+        let theme = UiTheme::default();
+        let viewport = UiViewport::default();
+        let metrics = UiMetrics::from_viewport_and_theme(&viewport, &theme);
+        let node = floating_panel_node(&theme, &metrics, &viewport);
+
+        assert_eq!(node.width, px(floating_panel_width(&metrics, &viewport)));
+        assert_eq!(node.width, px(metrics.dialog_max_width.min(420.0)));
+    }
+
+    #[test]
+    fn floating_panel_position_uses_metrics_and_safe_area() {
+        let theme = UiTheme::default();
+        let viewport = UiViewport {
+            safe_area: crate::game::ui::core::UiSafeArea {
+                top: 7.0,
+                right: 11.0,
+                ..default()
+            },
+            ..default()
+        };
+        let metrics = UiMetrics::from_viewport_and_theme(&viewport, &theme);
+        let node = floating_panel_node(&theme, &metrics, &viewport);
+
+        assert_eq!(node.right, px(metrics.page_padding + 11.0));
+        assert_eq!(
+            node.top,
+            px(metrics.page_padding + 7.0 + metrics.touch_target_min)
+        );
+    }
 }

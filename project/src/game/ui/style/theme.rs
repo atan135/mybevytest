@@ -69,6 +69,7 @@ pub(in crate::game) struct UiTextTheme {
 #[derive(Clone, Debug, Deserialize)]
 pub(in crate::game) struct UiLayoutTheme {
     pub screen_padding: f32,
+    #[allow(dead_code)]
     pub overlay_padding: f32,
     pub page_gap: f32,
     pub panel_gap: f32,

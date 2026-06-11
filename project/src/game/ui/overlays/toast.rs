@@ -1,13 +1,16 @@
 use bevy::prelude::*;
 
 use crate::game::ui::{
-    core::{UiAnimatedAlpha, UiAnimationCompletion, UiAnimationEasing, UiLayer, UiLayerRoot},
+    core::{
+        UiAnimatedAlpha, UiAnimationCompletion, UiAnimationEasing, UiLayer, UiLayerRoot, UiMetrics,
+        UiViewport,
+    },
     i18n::{UiI18n, UiI18nText},
     style::{
         UiFontAssets, UiTheme,
         theme::{
-            UiThemeBackgroundRole, UiThemeBorderRole, UiThemePanelNodeRole, UiThemeRootNodeRole,
-            UiThemeTextColorRole, UiThemeTextStyleRole,
+            UiThemeBackgroundRole, UiThemeBorderRole, UiThemeRootNodeRole, UiThemeTextColorRole,
+            UiThemeTextStyleRole,
         },
     },
 };
@@ -88,6 +91,8 @@ pub(in crate::game) fn tick_toasts(
 pub(in crate::game) fn spawn_toast(
     commands: &mut Commands,
     theme: &UiTheme,
+    metrics: &UiMetrics,
+    viewport: &UiViewport,
     fonts: &UiFontAssets,
     toast: &UiToast,
 ) {
@@ -109,9 +114,14 @@ pub(in crate::game) fn spawn_toast(
                 position_type: PositionType::Absolute,
                 left: px(0),
                 right: px(0),
-                top: px(theme.layout.overlay_padding),
+                top: px(metrics.page_padding + viewport.safe_area.top),
                 justify_content: JustifyContent::Center,
-                padding: UiRect::horizontal(px(theme.layout.overlay_padding)),
+                padding: UiRect {
+                    left: px(metrics.page_padding + viewport.safe_area.left),
+                    right: px(metrics.page_padding + viewport.safe_area.right),
+                    top: px(0),
+                    bottom: px(0),
+                },
                 ..default()
             },
             ZIndex(200),
@@ -119,14 +129,7 @@ pub(in crate::game) fn spawn_toast(
         ))
         .with_children(|root| {
             root.spawn((
-                UiThemePanelNodeRole::Toast,
-                Node {
-                    max_width: px(420),
-                    padding: UiRect::axes(px(18), px(12)),
-                    border: UiRect::all(px(theme.panel.border)),
-                    border_radius: BorderRadius::all(px(theme.button.radius)),
-                    ..default()
-                },
+                toast_panel_node(theme, metrics),
                 BackgroundColor(theme.colors.panel_background.with_alpha(0.0)),
                 BorderColor::all(theme.colors.panel_border.with_alpha(0.0)),
                 UiThemeBackgroundRole::Panel,
@@ -145,6 +148,20 @@ pub(in crate::game) fn spawn_toast(
                 }
             });
         });
+}
+
+fn toast_panel_node(theme: &UiTheme, metrics: &UiMetrics) -> Node {
+    Node {
+        max_width: px(toast_panel_max_width(metrics)),
+        padding: UiRect::axes(px(metrics.panel_padding), px(metrics.control_gap * 1.5)),
+        border: UiRect::all(px(theme.panel.border)),
+        border_radius: BorderRadius::all(px(theme.button.radius)),
+        ..default()
+    }
+}
+
+fn toast_panel_max_width(metrics: &UiMetrics) -> f32 {
+    metrics.dialog_max_width.min(metrics.content_max_width)
 }
 
 pub(in crate::game) fn close_toasts(
@@ -305,5 +322,18 @@ mod tests {
     #[test]
     fn fade_out_does_not_repeat_once_started() {
         assert!(!should_start_toast_fade_out(2.4, 2.4, 0.2, true));
+    }
+
+    #[test]
+    fn toast_panel_max_width_uses_metrics_bounds() {
+        let theme = UiTheme::default();
+        let metrics = UiMetrics::default();
+        let node = toast_panel_node(&theme, &metrics);
+
+        assert_eq!(node.max_width, px(toast_panel_max_width(&metrics)));
+        assert_eq!(
+            node.max_width,
+            px(metrics.dialog_max_width.min(metrics.content_max_width))
+        );
     }
 }

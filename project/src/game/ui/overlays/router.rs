@@ -2,7 +2,7 @@ use bevy::prelude::*;
 
 use crate::game::{
     navigation::{AppUiMode, RouteButton},
-    ui::core::{UiAnimationSystems, UiFocusSystems, UiPanelCommand},
+    ui::core::{UiAnimationSystems, UiFocusSystems, UiMetrics, UiPanelCommand, UiViewport},
     ui::overlays::{
         loading::sync_loading_entry_border_alpha,
         modal::{UiModalResult, handle_modal_action_buttons, sync_confirm_entry_visual_alpha},
@@ -82,6 +82,8 @@ fn handle_route_buttons(
 fn handle_ui_route_commands(
     mut commands: Commands,
     theme: Res<UiTheme>,
+    metrics: Res<UiMetrics>,
+    viewport: Res<UiViewport>,
     fonts: Res<UiFontAssets>,
     mut route_commands: MessageReader<UiRouteCommand>,
     mut next_mode: ResMut<NextState<AppUiMode>>,
@@ -97,7 +99,7 @@ fn handle_ui_route_commands(
             }
             UiRouteCommand::ShowToast(toast) => {
                 close_toasts(&mut commands, &toast_roots);
-                spawn_toast(&mut commands, &theme, &fonts, toast);
+                spawn_toast(&mut commands, &theme, &metrics, &viewport, &fonts, toast);
             }
         }
     }
